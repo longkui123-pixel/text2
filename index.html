@@ -1,0 +1,2692 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>像素药盒 PIXEL DOSE</title>
+<meta name="theme-color" content="#17112B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="像素药盒">
+<meta name="format-detection" content="telephone=no">
+<style>
+/* ==========================================================================
+   像素药盒 PIXEL DOSE — 像素风吃药提醒 / 单文件离线版
+   设计标准：DESIGN_SPEC.md（深色唯一主题 / 无圆角 / 无渐变 / 只用 steps 动效）
+   ========================================================================== */
+
+/* ------------------------------ 字体 ------------------------------ */
+@font-face{
+  font-family:FusionPixel;
+  src:url(data:font/woff2;base64,{{FUSION_WOFF2_B64}}) format('woff2');
+  font-weight:400;font-style:normal;font-display:block;
+}
+@font-face{
+  font-family:PressStart2P;
+  src:url(data:font/woff2;base64,{{PRESS2P_WOFF2_B64}}) format('woff2');
+  font-weight:400;font-style:normal;font-display:block;
+}
+
+/* ------------------------------ 变量 ------------------------------ */
+:root{
+  --bg:#17112B; --bg2:#1E1638;
+  --surface:#241A45; --surface2:#2D2154; --surface3:#3A2B6B;
+  --line:#4B3A84; --line-dark:#0E0A1C;
+  --text:#F4EEFF; --text-dim:#B6A4E0; --text-mute:#7F6FA8;
+  --mint:#5CF2B6; --peach:#FF9D7A; --gold:#FFD166;
+  --lilac:#B388FF; --sky:#7AD7FF; --rose:#FF7EB6;
+  --white:#FFFFFF;
+  --shadow:#0E0A1C;
+  --accent:#5CF2B6;
+  --accent-ink:#0E0A1C;
+  --cut:6px;
+  --cutpath:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px);
+  --cutpath-sm:polygon(4px 0,100% 0,100% calc(100% - 4px),calc(100% - 4px) 100%,0 100%,0 4px);
+  --font-cn:FusionPixel,ui-monospace,'Courier New',monospace;
+  --font-num:PressStart2P,ui-monospace,'Courier New',monospace;
+}
+
+/* ------------------------------ 基础 ------------------------------ */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html,body{height:100%;margin:0;padding:0}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-cn);
+  font-size:12px;line-height:1.6;letter-spacing:.5px;
+  overflow:hidden;
+  -webkit-font-smoothing:none;
+  -webkit-tap-highlight-color:transparent;
+  overscroll-behavior:none;
+  touch-action:manipulation;
+}
+button,input,textarea,select{font-family:inherit;font-size:inherit;color:inherit;letter-spacing:inherit;line-height:inherit}
+button{background:none;border:0;padding:0;margin:0;cursor:pointer;-webkit-appearance:none;appearance:none;text-align:inherit}
+h1,h2,h3,h4,p{margin:0;font-weight:400}
+ul{margin:0;padding:0;list-style:none}
+svg{display:block}
+.num{font-family:var(--font-num);letter-spacing:.5px;font-variant-ligatures:none}
+.dim{color:var(--text-dim)}
+.mute{color:var(--text-mute)}
+.nowrap{white-space:nowrap}
+.hidden{display:none !important}
+
+/* ------------------------------ App 骨架 ------------------------------ */
+#app{
+  position:fixed;inset:0;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+  background:var(--bg);
+  max-width:480px;margin:0 auto;
+  border-left:1px solid var(--line-dark);
+  border-right:1px solid var(--line-dark);
+}
+
+/* 假状态条（仅网页版装饰） */
+.statusbar{
+  flex:none;z-index:40;
+  display:flex;align-items:center;justify-content:space-between;
+  height:calc(24px + env(safe-area-inset-top,0px));
+  padding:env(safe-area-inset-top,0px) 14px 0;
+  background:var(--bg);
+  font-family:var(--font-num);font-size:8px;letter-spacing:.5px;color:var(--text-mute);
+}
+.statusbar .sb-mid{color:var(--text-dim);font-size:8px;letter-spacing:1px}
+.batt{display:flex;align-items:center;gap:2px}
+.batt i{display:block;width:3px;height:8px;background:var(--mint)}
+.batt i:nth-child(4){background:var(--surface3)}
+.batt .bcap{display:block;width:2px;height:4px;background:var(--line);margin-left:1px}
+
+/* 顶部 6px 横线装饰 */
+.stripes{
+  flex:none;height:6px;
+  background-image:repeating-linear-gradient(180deg,var(--line) 0 1px,transparent 1px 3px);
+  opacity:.45;
+}
+
+/* ------------------------------ 主区域 / 视图 ------------------------------ */
+main{flex:1;position:relative;overflow:hidden}
+.view{
+  position:absolute;inset:0;
+  overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;
+  display:none;
+  background-color:var(--bg);
+  background-image:radial-gradient(var(--line-dark) 1px,transparent 1px);
+  background-size:4px 4px;
+  scrollbar-width:none;
+}
+.view::-webkit-scrollbar{display:none;width:0;height:0}
+.view[data-active="true"]{display:block;animation:viewIn .22s steps(3) both}
+@keyframes viewIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* 页头 */
+.vhead{
+  position:sticky;top:0;z-index:20;
+  display:flex;align-items:flex-end;justify-content:space-between;gap:10px;
+  padding:12px 16px 10px;
+  background-color:var(--bg);
+  background-image:radial-gradient(var(--line-dark) 1px,transparent 1px);
+  background-size:4px 4px;
+}
+.vhead::after{
+  content:'';position:absolute;left:16px;right:16px;bottom:0;height:1px;
+  background-image:repeating-linear-gradient(90deg,var(--line) 0 4px,transparent 4px 8px);
+  opacity:.75;
+}
+.htext{min-width:0;flex:1}
+.ttl{font-size:18px;line-height:1.2;letter-spacing:1px;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub{margin-top:5px;font-size:12px;line-height:1.25;color:var(--text-dim);letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vbody{padding:12px 16px calc(26px + env(safe-area-inset-bottom,0px))}
+
+/* 图标按钮 44×44 */
+.icon-btn{
+  flex:none;width:44px;height:44px;min-width:44px;
+  display:grid;place-items:center;
+  color:var(--text-dim);
+  background:var(--surface);
+  border:2px solid var(--line);
+  box-shadow:3px 3px 0 var(--shadow);
+  transition:transform .12s steps(2),box-shadow .12s steps(2),color .12s steps(2);
+}
+.icon-btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--shadow);color:var(--text)}
+.icon-btn[aria-pressed="true"]{color:var(--mint);border-color:var(--line)}
+.icon-btn.bare{background:none;border:0;box-shadow:none}
+.icon-btn.bare:active{transform:none;box-shadow:none;background:var(--surface2)}
+
+/* ------------------------------ 卡片 / 区块 ------------------------------ */
+.stack{display:flex;flex-direction:column;gap:12px}
+.card{
+  position:relative;
+  background:var(--surface);
+  border:2px solid var(--line);
+  box-shadow:4px 4px 0 var(--shadow);
+}
+.card.small{box-shadow:3px 3px 0 var(--shadow)}
+.sec{margin-top:16px}
+.sec-h{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 9px}
+.sec-h h2{font-size:14px;letter-spacing:1px;color:var(--text)}
+.sec-h .sec-meta{font-size:11px;color:var(--text-mute);letter-spacing:.5px}
+
+/* ------------------------------ 今日：总览 ------------------------------ */
+.ov{padding:13px 14px 14px}
+.ov-top{display:flex;align-items:center;gap:8px;margin-bottom:11px}
+.ov-lab{font-size:11px;letter-spacing:1px;color:var(--text-dim)}
+.ov-frac{font-size:13px;color:var(--mint);line-height:1.2}
+.ov-top .sp{flex:1}
+.streak{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gold);line-height:1}
+.streak .sv{width:16px;height:16px;flex:none}
+.streak b{font-family:var(--font-num);font-size:11px;font-weight:400;letter-spacing:.5px}
+
+/* 分段进度条 */
+.segbar{display:flex;gap:2px;height:12px}
+.segbar i{
+  flex:1 1 0;min-width:0;height:12px;display:block;
+  background:var(--surface3);
+  border:1px solid var(--line-dark);
+}
+.segbar i.on{
+  background:var(--mint);border-color:var(--mint);
+  animation:segPop .18s steps(2) both;
+}
+@keyframes segPop{from{transform:scaleY(.35)}to{transform:scaleY(1)}}
+
+/* ------------------------------ 今日：下一次提醒 ------------------------------ */
+.hero{padding:12px 14px 14px;background:var(--surface);border-color:var(--line)}
+.hero.is-due{border-color:var(--gold)}
+.hero-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:13px}
+.ls{font-family:var(--font-num);font-size:8px;letter-spacing:1px;color:var(--text-mute);line-height:1.4}
+.hero-status{display:flex;align-items:baseline;gap:4px;font-size:11px;line-height:1.3;color:var(--mint)}
+.hero-status .num{font-size:10px}
+.hero-status.due{color:var(--gold);animation:blink2 1s steps(1) infinite}
+@keyframes blink2{0%,60%{opacity:1}61%,100%{opacity:.55}}
+.hero-main{display:flex;align-items:center;gap:12px}
+.med-tile{
+  position:relative;flex:none;width:52px;height:52px;
+  display:grid;place-items:center;
+  background:var(--surface2);
+  border:2px solid var(--line);
+  box-shadow:4px 4px 0 var(--shadow);
+  color:var(--c,#5CF2B6);
+}
+.med-tile::after{
+  content:'';position:absolute;right:0;bottom:0;width:4px;height:4px;background:var(--edge,var(--c,#5CF2B6));
+}
+.hero-info{min-width:0;flex:1}
+.hero-time{font-family:var(--font-num);font-size:24px;line-height:1.05;color:var(--white);letter-spacing:1px}
+.hero-name{font-size:16px;line-height:1.25;color:var(--white);margin-top:7px;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hero-dose{font-size:12px;line-height:1.3;color:var(--text-dim);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hero-actions{display:flex;align-items:stretch;gap:10px;margin-top:15px}
+.hero-actions .cut-wrap{flex:1 1 auto}
+.hero-actions .btn-ghost{flex:0 0 96px;height:48px;padding:0 6px;font-size:11px;line-height:1.35}
+
+/* 像素切角主按钮 */
+.cut-wrap{position:relative;display:flex;min-height:48px}
+.cut-wrap>.cut-shadow{
+  position:absolute;top:4px;left:4px;right:-4px;bottom:-4px;
+  background:var(--shadow);clip-path:var(--cutpath);
+}
+.cut-wrap>.cut-btn{
+  position:relative;z-index:1;flex:1;
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  width:100%;height:48px;min-height:48px;
+  background:var(--accent);color:var(--accent-ink);
+  border:2px solid var(--line-dark);
+  clip-path:var(--cutpath);
+  font-size:15px;letter-spacing:2px;
+  transition:transform .12s steps(2);
+}
+.cut-wrap>.cut-btn:active{transform:translate(2px,2px)}
+.cut-wrap>.cut-btn:disabled{background:var(--surface3);color:var(--text-mute)}
+
+/* 通用按钮 */
+.btn-ghost{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  min-height:44px;padding:0 12px;
+  background:var(--surface3);color:var(--text);
+  border:2px solid var(--line);
+  box-shadow:3px 3px 0 var(--shadow);
+  font-size:12px;letter-spacing:1px;
+  transition:transform .12s steps(2),box-shadow .12s steps(2);
+}
+.btn-ghost:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--shadow)}
+.btn-ghost.wide{width:100%;height:48px;font-size:14px}
+.btn-mint{background:var(--mint);color:var(--line-dark);border-color:var(--line-dark)}
+.btn-peach{background:none;color:var(--peach);border-color:var(--peach);box-shadow:3px 3px 0 var(--shadow)}
+.btn-mini{min-height:36px;padding:0 10px;font-size:11px;box-shadow:2px 2px 0 var(--shadow)}
+
+/* ------------------------------ 今日：清单 ------------------------------ */
+.dose-row{
+  position:relative;display:flex;align-items:center;gap:10px;
+  min-height:64px;padding:10px 10px 10px 12px;
+  background:var(--surface);border:2px solid var(--line);
+  box-shadow:3px 3px 0 var(--shadow);
+  transition:transform .12s steps(2),box-shadow .12s steps(2),border-color .12s steps(2);
+}
+.dose-row+.dose-row{margin-top:10px}
+.dose-row[data-status="now"]{border-color:var(--mint);background:var(--surface2)}
+.dose-row[data-status="taken"]{background:var(--surface)}
+.dose-row[data-status="taken"] .dose-name{color:var(--text-dim)}
+.dose-row[data-status="missed"] .dose-time-txt{color:var(--peach)}
+.row-press:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--shadow)}
+.dose-time{flex:none;width:58px;display:flex;flex-direction:column;gap:3px}
+.dose-time-txt{font-family:var(--font-num);font-size:12px;line-height:1.2;color:var(--text);letter-spacing:.5px}
+.dose-st{font-size:10px;line-height:1.2;letter-spacing:.5px;color:var(--text-mute);white-space:nowrap}
+.dose-row[data-status="taken"] .dose-st{color:var(--mint)}
+.dose-row[data-status="now"] .dose-st{color:var(--gold)}
+.dose-row[data-status="missed"] .dose-st{color:var(--peach)}
+.dose-mid{flex:1;min-width:0;display:flex;align-items:center;gap:8px}
+.dose-name{font-size:14px;line-height:1.25;color:var(--text);letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dose-dose{font-size:11px;line-height:1.25;color:var(--text-dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chk{
+  flex:none;width:44px;height:44px;
+  display:grid;place-items:center;
+  background:none;border:2px solid var(--line);color:var(--text-dim);
+  transition:transform .12s steps(2),background .12s steps(2),border-color .12s steps(2);
+}
+.chk:active{transform:translate(1px,1px)}
+.chk[data-on="1"]{background:var(--mint);border-color:var(--line-dark);color:var(--line-dark)}
+.chk[data-late="1"]{border-color:var(--peach);color:var(--peach);font-size:12px;letter-spacing:0}
+.chk .chk-word{font-size:12px;letter-spacing:0;line-height:1}
+
+/* 空状态 */
+.empty{
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  padding:26px 18px 24px;text-align:center;
+  background:var(--surface);border:2px solid var(--line);box-shadow:4px 4px 0 var(--shadow);
+}
+.empty .ill{width:56px;height:56px;display:grid;place-items:center;color:var(--text-mute);background:var(--surface2);border:2px solid var(--line);box-shadow:3px 3px 0 var(--shadow)}
+.empty h3{font-size:15px;letter-spacing:1px;color:var(--text)}
+.empty p{font-size:11px;line-height:1.6;color:var(--text-mute);max-width:230px}
+.empty .btn-ghost{width:100%;max-width:220px;height:46px;font-size:13px}
+
+/* ------------------------------ 药箱 ------------------------------ */
+.med-card{
+  position:relative;display:flex;align-items:center;gap:11px;
+  min-height:96px;padding:12px 10px 12px 16px;
+  background:var(--surface);border:2px solid var(--line);
+  box-shadow:3px 3px 0 var(--shadow);
+  width:100%;text-align:left;
+  transition:transform .12s steps(2),box-shadow .12s steps(2);
+}
+.med-card+.med-card{margin-top:12px}
+.med-card:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--shadow)}
+.med-card .strip{position:absolute;left:-2px;top:-2px;bottom:-2px;width:4px;background:var(--c,#5CF2B6)}
+.med-tile-sm{flex:none;width:40px;height:40px;display:grid;place-items:center;background:var(--surface2);border:2px solid var(--line);color:var(--c,#5CF2B6)}
+.med-main{flex:1;min-width:0}
+.med-name{font-size:16px;line-height:1.25;color:var(--text);letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.med-dose{font-size:11px;line-height:1.3;color:var(--text-dim);margin-top:2px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.chip{
+  display:inline-flex;align-items:center;gap:4px;
+  background:var(--surface3);border:1px solid var(--line);
+  padding:2px 6px;font-size:10px;line-height:1.4;color:var(--text-dim);letter-spacing:.5px;
+}
+.chip .num{font-size:9px;color:var(--white)}
+.chip.warn{color:var(--peach);border-color:var(--peach)}
+.med-chev{flex:none;width:32px;display:grid;place-items:center;color:var(--text-mute)}
+
+/* ------------------------------ 编辑层 ------------------------------ */
+#editor{
+  position:fixed;inset:0;z-index:80;
+  display:none;flex-direction:column;
+  background:var(--bg2);
+  max-width:480px;margin:0 auto;
+  border-left:1px solid var(--line-dark);border-right:1px solid var(--line-dark);
+}
+#editor[data-open="true"]{display:flex;animation:sheetIn .24s steps(4) both}
+#editor.closing{animation:sheetOut .18s steps(3) both}
+@keyframes sheetIn{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes sheetOut{from{transform:translateY(0)}to{transform:translateY(100%)}}
+.ehead{
+  flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:calc(8px + env(safe-area-inset-top,0px)) 12px 8px;
+  border-bottom:1px dashed var(--line);
+}
+.ehead .etitle{font-size:15px;letter-spacing:2px;color:var(--white)}
+.ehead .side{min-width:64px;display:flex;justify-content:flex-start}
+.ehead .side.r{justify-content:flex-end}
+.etext-btn{min-height:44px;padding:0 8px;display:inline-flex;align-items:center;font-size:13px;letter-spacing:1px;color:var(--text-dim);transition:transform .12s steps(2)}
+.etext-btn:active{transform:translateY(1px)}
+.etext-btn.mint{color:var(--mint)}
+.ebody{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px calc(30px + env(safe-area-inset-bottom,0px));scrollbar-width:none}
+.ebody::-webkit-scrollbar{display:none;width:0}
+.field{margin-bottom:18px}
+.field-lab{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px;font-size:12px;color:var(--text-dim);letter-spacing:1px}
+.field-lab .hint{font-size:10px;color:var(--text-mute);letter-spacing:.5px}
+.inp{
+  display:block;width:100%;height:46px;
+  background:var(--surface3);
+  border:2px solid var(--line);
+  color:var(--text);
+  font-family:var(--font-cn);font-size:16px;letter-spacing:.5px;
+  padding:0 12px;outline:none;border-radius:0;
+  transition:border-color .12s steps(2),box-shadow .12s steps(2);
+}
+.inp::placeholder{color:var(--text-mute);font-size:14px}
+.inp:focus{border-color:var(--mint);box-shadow:3px 3px 0 var(--shadow)}
+.inp.shake{animation:shakeX .24s steps(4) both;border-color:var(--peach)}
+@keyframes shakeX{0%{transform:translateX(-4px)}25%{transform:translateX(4px)}50%{transform:translateX(-3px)}75%{transform:translateX(3px)}100%{transform:translateX(0)}}
+
+.grid6{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.opt{
+  position:relative;min-height:44px;aspect-ratio:1/1;
+  display:grid;place-items:center;
+  background:var(--surface3);border:2px solid var(--line);
+  color:var(--text-dim);
+  transition:transform .12s steps(2),border-color .12s steps(2),box-shadow .12s steps(2),background .12s steps(2);
+}
+.opt:active{transform:translate(1px,1px)}
+.opt[aria-pressed="true"]{border-color:var(--mint);background:var(--surface2);box-shadow:3px 3px 0 var(--shadow);color:var(--white)}
+.opt[aria-pressed="true"]::after{content:'';position:absolute;left:0;bottom:0;width:6px;height:6px;background:var(--mint)}
+
+.swatches{display:flex;gap:8px;flex-wrap:wrap}
+.sw{
+  position:relative;width:44px;height:44px;
+  display:grid;place-items:center;
+  border:2px solid transparent;
+  transition:transform .12s steps(2),border-color .12s steps(2),background .12s steps(2);
+}
+.sw i{display:block;width:24px;height:24px;background:var(--c,#5CF2B6);border:2px solid var(--line-dark)}
+.sw:active{transform:translate(1px,1px)}
+.sw[aria-pressed="true"]{background:var(--surface3);border-color:var(--line)}
+
+.timerow{display:flex;align-items:center;gap:8px}
+.timerow+.timerow{margin-top:8px}
+.timeinp{
+  flex:1;height:44px;
+  background:var(--surface3);border:2px solid var(--line);
+  color:var(--white);font-family:var(--font-num);font-size:11px;
+  padding:0 10px;text-align:center;outline:none;border-radius:0;
+  color-scheme:dark;
+  transition:border-color .12s steps(2);
+}
+.timeinp:focus{border-color:var(--mint)}
+.timeinp::-webkit-calendar-picker-indicator{filter:invert(65%) sepia(20%) saturate(400%) hue-rotate(220deg);opacity:.75;cursor:pointer}
+.rm{flex:none;width:44px;height:44px;display:grid;place-items:center;background:var(--surface3);border:2px solid var(--peach);color:var(--peach);transition:transform .12s steps(2)}
+.rm:active{transform:translate(1px,1px)}
+.addtime{
+  margin-top:8px;width:100%;height:44px;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  background:none;color:var(--text-dim);
+  border:2px dashed var(--line);font-size:12px;letter-spacing:1px;
+}
+.addtime:active{background:var(--surface2)}
+
+.dayrow{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.day{
+  height:44px;display:grid;place-items:center;
+  background:var(--surface3);border:2px solid var(--line);
+  color:var(--text-mute);font-size:12px;letter-spacing:0;
+  transition:transform .12s steps(2),background .12s steps(2),color .12s steps(2),border-color .12s steps(2);
+}
+.day:active{transform:translate(1px,1px)}
+.day[aria-pressed="true"]{background:var(--surface2);border-color:var(--mint);color:var(--mint)}
+
+.danger-zone{border-top:1px dashed var(--line);padding-top:16px;margin-top:22px}
+.btn-danger{
+  width:100%;height:46px;display:flex;align-items:center;justify-content:center;gap:7px;
+  background:none;color:var(--peach);
+  border:2px solid var(--peach);box-shadow:3px 3px 0 var(--shadow);
+  font-size:13px;letter-spacing:1px;
+  transition:transform .12s steps(2),box-shadow .12s steps(2);
+}
+.btn-danger:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--shadow)}
+/* ------------------------------ 记录：日历 ------------------------------ */
+.cal{padding:10px 10px 12px}
+.cal-top{display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px}
+.arrow{
+  width:44px;height:44px;display:grid;place-items:center;
+  color:var(--text-dim);background:none;border:0;flex:none;
+  transition:background .12s steps(2),transform .12s steps(2);
+}
+.arrow:active{background:var(--surface2);transform:translateY(1px)}
+.arrow:disabled{color:var(--text-mute);opacity:.45}
+.cal-month{display:flex;align-items:baseline;justify-content:center;gap:1px;font-size:14px;letter-spacing:1px;color:var(--white);flex:1;white-space:nowrap}
+.cal-month .num{font-size:13px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
+.cal-wd{height:26px;display:grid;place-items:center;font-size:10px;color:var(--text-mute);letter-spacing:1px}
+.cal-cell{
+  position:relative;height:50px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  background:none;border:0;
+}
+.cal-cell[data-empty="1"]{pointer-events:none}
+.cal-cell[data-rec="1"]{cursor:pointer}
+.cal-cell:active .blk{transform:translate(1px,1px)}
+.blk{position:relative;width:26px;height:26px;background:var(--surface3);border:1px solid var(--line);transition:transform .12s steps(2)}
+.blk[data-s="full"]{background:var(--mint);border-color:var(--mint);display:grid;place-items:center;color:var(--line-dark)}
+.blk[data-s="part"]{background:var(--surface3);border:1px solid var(--line);overflow:hidden}
+.blk[data-s="part"]::after{content:'';position:absolute;left:-1px;right:-1px;bottom:-1px;height:50%;background:var(--gold);border-top:1px solid var(--line-dark)}
+.blk[data-s="miss"]{background-color:var(--surface3);border:2px solid var(--peach);background-image:repeating-linear-gradient(45deg,var(--peach) 0 1px,transparent 1px 4px)}
+.blk[data-s="none"]{background:var(--surface3);border:1px solid var(--line)}
+.cal-cell .dnum{font-family:var(--font-num);font-size:8px;line-height:1;color:var(--text-mute);letter-spacing:0}
+.cal-cell[data-today="1"] .blk{outline:2px solid var(--gold);outline-offset:1px}
+.cal-cell[data-today="1"] .dnum{color:var(--gold)}
+.cal-legend{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+.lg{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-mute);letter-spacing:.5px}
+.lg i{display:block;width:10px;height:10px;border:1px solid var(--line)}
+
+/* ------------------------------ 记录：统计 / 柱状图 ------------------------------ */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{
+  min-height:80px;padding:11px 5px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  background:var(--surface);border:2px solid var(--line);box-shadow:3px 3px 0 var(--shadow);
+  text-align:center;
+}
+.stat .v{display:flex;align-items:baseline;justify-content:center;gap:2px;font-family:var(--font-num);font-size:13px;line-height:1.1}
+.stat .v .u{font-family:var(--font-cn);font-size:10px;letter-spacing:0;color:var(--text-dim)}
+.stat .k{font-size:10px;color:var(--text-dim);letter-spacing:.5px;line-height:1.2}
+.stat.s-mint .v{color:var(--mint)}
+.stat.s-gold .v{color:var(--gold)}
+.stat.s-lilac .v{color:var(--lilac)}
+
+.chartcard{padding:14px 14px 12px}
+.chart{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;height:88px}
+.bcol{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end}
+.btrack{width:14px;height:64px;background:var(--surface3);border:1px solid var(--line-dark);display:flex;align-items:flex-end}
+.bfill{width:100%;background:var(--mint);transform-origin:bottom;animation:barGrow .34s steps(5) both}
+@keyframes barGrow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.blab{font-family:var(--font-cn);font-size:9px;color:var(--text-mute);letter-spacing:0;line-height:1}
+.bcol[data-today="1"] .blab{color:var(--gold)}
+.bcol[data-today="1"] .btrack{border-color:var(--line)}
+.chart-foot{display:flex;align-items:baseline;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)}
+.chart-foot .cf-t{font-size:11px;color:var(--text-dim)}
+.chart-foot .cf-v{font-size:11px;color:var(--mint)}
+
+/* ------------------------------ 设置 ------------------------------ */
+.grp{
+  background:var(--surface);border:2px solid var(--line);box-shadow:4px 4px 0 var(--shadow);
+  padding-bottom:4px;
+}
+.grp+.grp{margin-top:12px}
+.grp-h{display:flex;align-items:center;gap:8px;padding:12px 14px 6px}
+.grp-h .gico{width:16px;height:16px;display:grid;place-items:center;color:var(--text-dim);flex:none}
+.grp-h h2{font-size:13px;letter-spacing:1.5px;color:var(--text-dim)}
+.srow{display:flex;align-items:center;gap:10px;min-height:52px;padding:4px 14px}
+.srow+.srow{border-top:1px dashed var(--line)}
+.srow-l{flex:1;min-width:0}
+.srow-t{font-size:13px;line-height:1.35;color:var(--text);letter-spacing:.5px}
+.srow-s{font-size:10px;line-height:1.45;color:var(--text-mute);margin-top:2px}
+.srow-r{flex:none;display:flex;align-items:center;gap:8px}
+.srow.tap:active{background:var(--surface2)}
+.srow .val{font-size:11px;color:var(--text-mute);letter-spacing:.5px}
+
+.switch{position:relative;width:44px;height:44px;display:grid;place-items:center;flex:none}
+.switch .tr{width:40px;height:22px;background:var(--surface3);border:2px solid var(--line);position:relative;transition:background .12s steps(2),border-color .12s steps(2)}
+.switch .kb{position:absolute;top:2px;left:2px;width:14px;height:14px;background:var(--text-mute);transition:transform .16s steps(3),background .16s steps(2)}
+.switch[aria-checked="true"] .tr{background:rgba(92,242,182,.18);border-color:var(--mint)}
+.switch[aria-checked="true"] .kb{transform:translateX(18px);background:var(--mint)}
+
+.accent-row{display:flex;gap:10px;align-items:center;padding:10px 14px 14px}
+.acc{
+  flex:1;height:48px;display:grid;place-items:center;
+  background:var(--surface3);border:2px solid var(--line);
+  transition:transform .12s steps(2),border-color .12s steps(2);
+}
+.acc:active{transform:translate(1px,1px)}
+.acc i{display:block;width:20px;height:20px;background:var(--c,#5CF2B6);border:2px solid var(--line-dark)}
+.acc[aria-pressed="true"]{border-color:var(--c,#5CF2B6);background:var(--surface2);box-shadow:3px 3px 0 var(--shadow)}
+
+.about-lines{padding:2px 14px 12px}
+.about-lines p{font-size:10px;line-height:1.7;color:var(--text-mute);letter-spacing:.5px}
+.about-lines p+p{margin-top:2px}
+.about-name{display:flex;align-items:baseline;gap:8px;padding:10px 14px 2px}
+.about-name .an{font-size:14px;letter-spacing:1px;color:var(--white)}
+.about-name .av{font-family:var(--font-num);font-size:9px;color:var(--text-mute)}
+
+/* ------------------------------ 底部 tab ------------------------------ */
+.tabbar{
+  flex:none;z-index:40;display:flex;
+  background:var(--surface);
+  border-top:2px solid var(--line);
+  box-shadow:0 -3px 0 var(--line-dark);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+.tab{
+  position:relative;flex:1;min-width:0;height:60px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  color:var(--text-mute);
+  transition:background .12s steps(2),color .12s steps(2);
+}
+.tab .sv{width:20px;height:20px;display:grid;place-items:center}
+.tab .tl{font-size:10px;letter-spacing:1px;line-height:1;white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--mint);background:var(--surface2)}
+.tab[aria-selected="true"]::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:32px;height:2px;background:var(--mint)}
+.tab:active{transform:translateY(1px)}
+
+/* ------------------------------ Toast ------------------------------ */
+#toasts{
+  position:fixed;left:0;right:0;top:calc(34px + env(safe-area-inset-top,0px));
+  z-index:95;display:flex;flex-direction:column;align-items:center;gap:8px;
+  padding:0 16px;pointer-events:none;
+}
+.toast{
+  pointer-events:auto;max-width:100%;
+  display:flex;align-items:center;gap:9px;
+  background:var(--mint);color:var(--line-dark);
+  border:2px solid var(--line-dark);box-shadow:4px 4px 0 var(--line-dark);
+  padding:8px 10px;font-size:12px;letter-spacing:.5px;line-height:1.35;
+  animation:toastIn .18s steps(3) both;
+}
+.toast.out{animation:toastOut .16s steps(2) both}
+.toast.gold{background:var(--gold)}
+.toast.peach{background:var(--peach)}
+.toast.plain{background:var(--surface2);color:var(--text);border-color:var(--line)}
+.toast .t-ico{width:16px;height:16px;flex:none;display:grid;place-items:center}
+.toast .t-txt{flex:1;min-width:0;padding:1px 0}
+.toast .t-act{
+  flex:none;padding:0 8px;min-height:28px;
+  display:grid;place-items:center;
+  background:var(--line-dark);color:var(--mint);font-size:11px;letter-spacing:1px;
+}
+@keyframes toastIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes toastOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-6px)}}
+
+/* ------------------------------ 提醒横幅 ------------------------------ */
+#banner{
+  position:fixed;left:0;right:0;top:calc(6px + env(safe-area-inset-top,0px));
+  z-index:96;display:none;padding:0 10px;
+  max-width:480px;margin:0 auto;
+}
+#banner[data-open="true"]{display:block;animation:bannerIn .22s steps(3) both}
+@keyframes bannerIn{from{transform:translateY(-110%)}to{transform:translateY(0)}}
+#banner .bn{background:var(--surface2);border:2px solid var(--gold);box-shadow:5px 5px 0 var(--line-dark);padding:11px 12px}
+#banner .bn-top{display:flex;align-items:center;gap:8px}
+#banner .bn-top .bn-lab{font-family:var(--font-num);font-size:8px;letter-spacing:1px;color:var(--gold)}
+#banner .bn-top .bn-x{margin-left:auto;width:28px;height:28px;display:grid;place-items:center;color:var(--text-dim)}
+#banner .bn-main{display:flex;align-items:center;gap:10px;margin-top:9px}
+#banner .bn-time{font-family:var(--font-num);font-size:16px;color:var(--white);line-height:1.1}
+#banner .bn-name{font-size:14px;color:var(--white);line-height:1.3;margin-top:4px}
+#banner .bn-dose{font-size:11px;color:var(--text-dim);margin-top:2px}
+#banner .bn-acts{display:flex;gap:8px;margin-top:11px}
+#banner .bn-acts button{flex:1}
+
+/* ------------------------------ 像素弹窗 ------------------------------ */
+.modal{
+  position:fixed;inset:0;z-index:97;display:none;
+  place-items:center;padding:22px;
+  background:rgba(14,10,28,.8);
+}
+.modal[data-open="true"]{display:grid;animation:scrimIn .16s steps(2) both}
+@keyframes scrimIn{from{opacity:0}to{opacity:1}}
+.dialog{
+  width:100%;max-width:322px;
+  background:var(--surface);border:2px solid var(--line);
+  box-shadow:6px 6px 0 var(--line-dark);
+  padding:16px;animation:dialogIn .2s steps(3) both;
+}
+@keyframes dialogIn{from{transform:translateY(12px)}to{transform:translateY(0)}}
+.dialog h3{display:flex;align-items:center;gap:8px;font-size:15px;letter-spacing:1px;color:var(--white);line-height:1.3}
+.dialog h3 .dico{width:20px;height:20px;flex:none;display:grid;place-items:center;color:var(--peach)}
+.dialog p{margin-top:10px;font-size:12px;line-height:1.7;color:var(--text-dim);letter-spacing:.5px}
+.dialog .acts{display:flex;gap:8px;margin-top:18px}
+.dialog .acts button{flex:1;height:44px;font-size:13px;letter-spacing:1px}
+
+/* ------------------------------ 天明细 sheet ------------------------------ */
+.scrim{
+  position:fixed;inset:0;z-index:60;background:rgba(14,10,28,.72);
+  opacity:0;pointer-events:none;
+  transition:opacity .16s steps(2);
+}
+.scrim[data-open="true"]{opacity:1;pointer-events:auto}
+.sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:70;
+  max-width:480px;margin:0 auto;
+  background:var(--bg2);
+  border:2px solid var(--line);border-bottom:0;
+  box-shadow:0 -4px 0 var(--line-dark);
+  display:none;flex-direction:column;max-height:74%;
+}
+.sheet[data-open="true"]{display:flex;animation:sheetUp .22s steps(4) both}
+@keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.sheet-h{
+  flex:none;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;
+  padding:12px 12px 11px 14px;border-bottom:1px dashed var(--line);
+}
+.sheet-h h3{font-size:14px;letter-spacing:1px;color:var(--white);line-height:1.3}
+.sheet-h .dsub{font-size:10px;color:var(--text-mute);margin-top:3px;letter-spacing:.5px}
+.sheet-x{flex:none;width:36px;height:36px;display:grid;place-items:center;color:var(--text-dim);background:var(--surface3);border:2px solid var(--line)}
+.sheet-x:active{transform:translate(1px,1px)}
+.sheet-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:8px 14px calc(20px + env(safe-area-inset-bottom,0px))}
+.det-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px dashed var(--line)}
+.det-row:first-child{border-top:0}
+.det-time{flex:none;width:50px;font-family:var(--font-num);font-size:11px;line-height:1.2;color:var(--text)}
+.det-main{flex:1;min-width:0}
+.det-name{font-size:13px;line-height:1.3;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.det-dose{font-size:10px;line-height:1.3;color:var(--text-mute);margin-top:2px}
+.det-tag{flex:none;font-size:10px;letter-spacing:.5px;padding:3px 6px;border:1px solid;line-height:1.4}
+.det-tag.t{color:var(--mint);border-color:var(--mint)}
+.det-tag.m{color:var(--peach);border-color:var(--peach)}
+.det-tag.p{color:var(--text-mute);border-color:var(--line)}
+.det-sum{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 8px;font-size:11px;color:var(--text-dim)}
+
+/* ------------------------------ 粒子 ------------------------------ */
+#fx{position:fixed;inset:0;z-index:94;pointer-events:none;overflow:hidden}
+.pt{position:absolute;width:3px;height:3px;animation:burst .52s steps(8) both}
+@keyframes burst{0%{transform:translate(0,0);opacity:1}100%{transform:translate(var(--dx),var(--dy));opacity:0}}
+
+/* ------------------------------ 杂项 ------------------------------ */
+.divider{height:1px;background-image:repeating-linear-gradient(90deg,var(--line) 0 4px,transparent 4px 8px);opacity:.8;margin:14px 0}
+.tiny{font-size:10px;color:var(--text-mute);line-height:1.65;letter-spacing:.5px}
+.center{text-align:center}
+.mt8{margin-top:8px}
+.mt12{margin-top:12px}
+.foot-note{padding:14px 4px 0;text-align:center;font-size:10px;color:var(--text-mute);letter-spacing:.5px;line-height:1.7}
+
+/* ------------------------------ 补充：动态内容样式 ------------------------------ */
+/* 连击火焰 2 帧 */
+.flame{position:relative;display:block;width:16px;height:16px;flex:none}
+.flame .fa,.flame .fb{position:absolute;inset:0;display:block}
+.flame .fa{animation:fswapA 1.1s steps(1) infinite}
+.flame .fb{opacity:0;animation:fswapB 1.1s steps(1) infinite}
+@keyframes fswapA{0%,49%{opacity:1}50%,100%{opacity:0}}
+@keyframes fswapB{0%,49%{opacity:0}50%,100%{opacity:1}}
+.streak span{font-size:12px;color:var(--gold)}
+
+/* 今日全部完成 */
+.done{padding:16px 14px}
+.done-wrap{display:flex;align-items:center;gap:12px}
+.done-ill{flex:none;width:52px;height:52px;display:grid;place-items:center;background:var(--surface2);border:2px solid var(--line);box-shadow:3px 3px 0 var(--shadow)}
+.done-txt{flex:1;min-width:0}
+.done-t{font-size:15px;letter-spacing:1px;color:var(--white);line-height:1.3}
+.done-s{font-size:11px;color:var(--text-dim);margin-top:5px;line-height:1.3}
+.done-stars{flex:none;color:var(--gold);display:grid;place-items:center;padding-right:2px}
+.hero.is-late{border-color:var(--peach)}
+.hero-status.late{color:var(--peach);animation:none}
+
+/* 行内块级 span（button 内不能放 div） */
+.med-main>span{display:block}
+.med-name,.med-dose{display:block}
+.dose-meta{min-width:0;flex:1}
+.det-main>span{display:block}
+.bn-info{display:flex;flex-direction:column;min-width:0;flex:1}
+.bn-tile{flex:none;width:36px;height:36px;display:grid;place-items:center;background:var(--surface);border:2px solid var(--line)}
+
+/* 日历图例小块 */
+.lg i{position:relative;overflow:hidden;display:block;width:10px;height:10px;background:var(--surface3);border:1px solid var(--line)}
+.lg i[data-s="full"]{background:var(--mint);border-color:var(--mint)}
+.lg i[data-s="part"]::after{content:'';position:absolute;left:0;right:0;bottom:0;height:50%;background:var(--gold)}
+.lg i[data-s="miss"]{border-color:var(--peach);background-image:repeating-linear-gradient(45deg,var(--peach) 0 1px,transparent 1px 3px)}
+
+/* 柱状图 */
+.btrack{overflow:hidden}
+.bfill{display:block}
+
+/* 可点行 */
+.srow.tap{cursor:pointer}
+.cal-cell:disabled{cursor:default}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- ================= 假状态条 ================= -->
+  <div class="statusbar" aria-hidden="true">
+    <span id="sb-time">00:00</span>
+    <span class="sb-mid">PIXEL DOSE</span>
+    <span class="batt"><i></i><i></i><i></i><i></i><b class="bcap"></b></span>
+  </div>
+  <div class="stripes" aria-hidden="true"></div>
+
+  <main>
+    <!-- ================= 今日 ================= -->
+    <section id="view-today" class="view" data-active="true" aria-label="今日">
+      <div class="vhead">
+        <div class="htext">
+          <h1 class="ttl">今天</h1>
+          <p class="sub" id="today-sub">11月8日 周六 · 晚安</p>
+        </div>
+        <button class="icon-btn" id="bell-btn" type="button" aria-label="通知设置" data-icon="bell" data-size="20"></button>
+      </div>
+      <div class="vbody">
+        <div class="card ov" id="ov-card">
+          <div class="ov-top">
+            <span class="ov-lab">今日</span>
+            <span class="ov-frac num" id="ov-frac">0/0</span>
+            <span class="sp"></span>
+            <span class="streak" id="ov-streak"></span>
+          </div>
+          <div class="segbar" id="ov-bar"></div>
+        </div>
+
+        <div class="sec" id="next-sec"><div id="next-card"></div></div>
+
+        <div class="sec" id="list-sec">
+          <div class="sec-h"><h2>今日清单</h2><span class="sec-meta" id="list-meta"></span></div>
+          <div id="dose-list"></div>
+        </div>
+
+        <p class="foot-note" id="today-foot"></p>
+      </div>
+    </section>
+
+    <!-- ================= 药箱 ================= -->
+    <section id="view-cabinet" class="view" data-active="false" aria-label="药箱">
+      <div class="vhead">
+        <div class="htext">
+          <h1 class="ttl">药箱</h1>
+          <p class="sub" id="cab-sub"></p>
+        </div>
+        <button class="icon-btn" id="add-med" type="button" aria-label="添加药品" data-icon="plus" data-size="20"></button>
+      </div>
+      <div class="vbody"><div id="cab-list"></div></div>
+    </section>
+
+    <!-- ================= 记录 ================= -->
+    <section id="view-history" class="view" data-active="false" aria-label="记录">
+      <div class="vhead">
+        <div class="htext">
+          <h1 class="ttl">记录</h1>
+          <p class="sub" id="hist-sub"></p>
+        </div>
+      </div>
+      <div class="vbody">
+        <div class="card cal">
+          <div class="cal-top">
+            <button class="arrow" id="cal-prev" type="button" aria-label="上个月" data-icon="chev-l" data-size="16"></button>
+            <div class="cal-month" id="cal-month"></div>
+            <button class="arrow" id="cal-next" type="button" aria-label="下个月" data-icon="chev-r" data-size="16"></button>
+          </div>
+          <div class="cal-grid" id="cal-wd"></div>
+          <div class="cal-grid" id="cal-grid"></div>
+          <div class="cal-legend" id="cal-legend"></div>
+        </div>
+
+        <div class="sec"><div class="stats" id="stats"></div></div>
+
+        <div class="sec">
+          <div class="sec-h"><h2>最近 7 天</h2><span class="sec-meta" id="chart-meta"></span></div>
+          <div class="card chartcard">
+            <div class="chart" id="chart"></div>
+            <div class="chart-foot" id="chart-foot"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 设置 ================= -->
+    <section id="view-settings" class="view" data-active="false" aria-label="设置">
+      <div class="vhead">
+        <div class="htext">
+          <h1 class="ttl">设置</h1>
+          <p class="sub" id="set-sub">提醒 · 外观 · 数据</p>
+        </div>
+      </div>
+      <div class="vbody" id="settings-body"></div>
+    </section>
+  </main>
+
+  <!-- ================= 底部 tab ================= -->
+  <nav class="tabbar" role="tablist" aria-label="主导航">
+    <button class="tab" type="button" role="tab" data-tab="today" aria-selected="true"><span class="sv" data-icon="capsule" data-size="20"></span><span class="tl">今日</span></button>
+    <button class="tab" type="button" role="tab" data-tab="cabinet" aria-selected="false"><span class="sv" data-icon="box" data-size="20"></span><span class="tl">药箱</span></button>
+    <button class="tab" type="button" role="tab" data-tab="history" aria-selected="false"><span class="sv" data-icon="calendar" data-size="20"></span><span class="tl">记录</span></button>
+    <button class="tab" type="button" role="tab" data-tab="settings" aria-selected="false"><span class="sv" data-icon="gear" data-size="20"></span><span class="tl">设置</span></button>
+  </nav>
+
+  <!-- ================= 遮罩 / 弹出层 ================= -->
+  <div class="scrim" id="scrim" data-open="false"></div>
+
+  <div class="sheet" id="sheet" data-open="false" role="dialog" aria-modal="true"></div>
+
+  <div id="editor" data-open="false" role="dialog" aria-modal="true" aria-label="编辑药品">
+    <div class="ehead">
+      <div class="side"><button class="etext-btn" id="ed-cancel" type="button">取消</button></div>
+      <div class="etitle" id="ed-title">新增药品</div>
+      <div class="side r"><button class="etext-btn mint" id="ed-save" type="button">保存</button></div>
+    </div>
+    <div class="ebody" id="ed-body"></div>
+  </div>
+
+  <div class="modal" id="modal" data-open="false" role="dialog" aria-modal="true"></div>
+
+  <div id="banner" data-open="false"></div>
+  <div id="toasts" aria-live="polite"></div>
+  <div id="fx" aria-hidden="true"></div>
+</div>
+
+<script>
+(function () {
+'use strict';
+
+/* =====================================================================
+   0. 常量
+   ===================================================================== */
+const LINE_DARK = '#0E0A1C';
+const COLORS = { mint:'#5CF2B6', gold:'#FFD166', lilac:'#B388FF', peach:'#FF9D7A', sky:'#7AD7FF', rose:'#FF7EB6' };
+const ACCENTS = ['mint','gold','lilac','peach'];
+const MED_COLORS = ['mint','gold','lilac','peach','sky','rose'];
+const ICON_KINDS = ['capsule','tablet','bottle','syringe','powder','drop'];
+const ALL_DAYS = [1,2,3,4,5,6,7];
+const WEEK_CN = ['一','二','三','四','五','六','日'];
+const STORE_KEY = 'medpixel.v1';
+
+/* 每种药色的三阶色调（主体 / 暗部 / 高光） */
+const TONES = {
+  mint:  { main:'#5CF2B6', dark:'#2E8E68', light:'#B8FFE1' },
+  gold:  { main:'#FFD166', dark:'#A8822E', light:'#FFEFBF' },
+  lilac: { main:'#B388FF', dark:'#6B4BA8', light:'#E0CDFF' },
+  peach: { main:'#FF9D7A', dark:'#A85A3E', light:'#FFD6C4' },
+  sky:   { main:'#7AD7FF', dark:'#3E86A8', light:'#C9EFFF' },
+  rose:  { main:'#FF7EB6', dark:'#A84670', light:'#FFCBDF' }
+};
+
+/* =====================================================================
+   1. 工具
+   ===================================================================== */
+const $ = function (sel, root) { return (root || document).querySelector(sel); };
+const $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
+const pad2 = function (n) { return (n < 10 ? '0' : '') + n; };
+const clamp = function (v, a, b) { return v < a ? a : (v > b ? b : v); };
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c];
+  });
+}
+function dateKey(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+function keyToDate(k) { const p = String(k).split('-'); return new Date(+p[0], (+p[1]) - 1, +p[2]); }
+function shiftDay(d, n) { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n); }
+function weekIndex(d) { const g = d.getDay(); return g === 0 ? 7 : g; }   /* 1=周一 … 7=周日 */
+function parseHM(t) { const p = String(t || '00:00').split(':'); return ((+p[0]) || 0) * 60 + ((+p[1]) || 0); }
+function fmtHM(mins) { const m = ((mins % 1440) + 1440) % 1440; return pad2(Math.floor(m / 60)) + ':' + pad2(m % 60); }
+function nowMinutes(d) { d = d || new Date(); return d.getHours() * 60 + d.getMinutes(); }
+function weekdayCN(d) { return WEEK_CN[weekIndex(d) - 1]; }
+function monthDayCN(d) { return (d.getMonth() + 1) + '月' + d.getDate() + '日'; }
+function sameDay(a, b) { return dateKey(a) === dateKey(b); }
+
+function greetingOf(d) {
+  const h = d.getHours();
+  if (h < 5) return '深夜了';
+  if (h < 11) return '早安';
+  if (h < 13) return '午安';
+  if (h < 18) return '下午好';
+  return '晚安';
+}
+
+/* =====================================================================
+   2. 像素图标引擎：16×16 网格 → SVG rect 拼像素
+   ===================================================================== */
+function blankGrid() {
+  const g = [];
+  for (let y = 0; y < 16; y++) { const row = []; for (let x = 0; x < 16; x++) row.push('.'); g.push(row); }
+  return g;
+}
+function setPx(g, x, y, c) {
+  x = Math.round(x); y = Math.round(y);
+  if (x >= 0 && x < 16 && y >= 0 && y < 16 && c && c !== '.') g[y][x] = c;
+}
+function fillRect(g, x, y, w, h, c) {
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) setPx(g, x + i, y + j, c);
+}
+function clearRect(g, x, y, w, h) {
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const px = x + i, py = y + j;
+    if (px >= 0 && px < 16 && py >= 0 && py < 16) g[py][px] = '.';
+  }
+}
+/* 圆角矩形：r=1 切 1 格角，r=2 切 3 格斜角 */
+function roundRect(g, x, y, w, h, r, c) {
+  r = r || 1;
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const dx = Math.min(i, w - 1 - i), dy = Math.min(j, h - 1 - j);
+    if (dx + dy < r) continue;
+    setPx(g, x + i, y + j, c);
+  }
+}
+function disc(g, cx, cy, r, c) {
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const dx = x - cx, dy = y - cy;
+    if (dx * dx + dy * dy <= r * r + 0.6) setPx(g, x, y, c);
+  }
+}
+function linePx(g, x0, y0, x1, y1, c) {
+  let dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+  let dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  for (let guard = 0; guard < 64; guard++) {
+    setPx(g, x0, y0, c);
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x0 += sx; }
+    if (e2 <= dx) { err += dx; y0 += sy; }
+  }
+}
+/* ASCII 行 → 网格（自动水平/垂直居中，字符：a=主体 b=暗部 l=高光 w=白 o=描边 .=空） */
+function art(rows) {
+  const g = blankGrid();
+  const h = rows.length;
+  const top = Math.floor((16 - h) / 2);
+  for (let i = 0; i < h; i++) {
+    const s = rows[i];
+    const x0 = Math.floor((16 - s.length) / 2);
+    for (let x = 0; x < s.length; x++) {
+      const ch = s.charAt(x);
+      if (ch !== '.' && ch !== ' ') setPx(g, x0 + x, top + i, ch);
+    }
+  }
+  return g;
+}
+/* 自动 1px 深色描边（只描外部轮廓） */
+function outline(g, c) {
+  c = c || 'o';
+  const out = g.map(function (row) { return row.slice(); });
+  const nb = [[1,0],[-1,0],[0,1],[0,-1]];
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    if (g[y][x] !== '.') continue;
+    for (let k = 0; k < 4; k++) {
+      const nx = x + nb[k][0], ny = y + nb[k][1];
+      if (nx < 0 || nx > 15 || ny < 0 || ny > 15) continue;
+      if (g[ny][nx] !== '.' && g[ny][nx] !== c) { out[y][x] = c; break; }
+    }
+  }
+  return out;
+}
+
+const ICON_BUILDERS = {};
+function defIcon(name, fn) { ICON_BUILDERS[name] = fn; }
+const ICON_CACHE = {};
+function iconGrid(name) {
+  if (ICON_CACHE[name]) return ICON_CACHE[name];
+  const fn = ICON_BUILDERS[name];
+  if (!fn) return null;
+  ICON_CACHE[name] = fn();
+  return ICON_CACHE[name];
+}
+
+/* ---------- 药品图标 ---------- */
+defIcon('capsule', function () {
+  const g = blankGrid();
+  roundRect(g, 2, 4, 12, 8, 2, 'a');
+  for (let y = 0; y < 16; y++) for (let x = 8; x < 14; x++) if (g[y][x] === 'a') g[y][x] = 'l';
+  for (let y = 5; y < 11; y++) if (g[y][7] !== '.') g[y][7] = 'a';
+  for (let y = 5; y < 11; y++) if (g[y][8] !== '.') g[y][8] = 'b';
+  return outline(g);
+});
+defIcon('tablet', function () {
+  const g = blankGrid();
+  disc(g, 7.5, 7.5, 5, 'a');
+  for (let x = 4; x <= 10; x++) { setPx(g, x, 7, 'b'); setPx(g, x, 8, 'b'); }
+  setPx(g, 5, 5, 'l'); setPx(g, 6, 5, 'l'); setPx(g, 4, 6, 'l');
+  return outline(g);
+});
+defIcon('bottle', function () {
+  const g = blankGrid();
+  fillRect(g, 6, 1, 4, 2, 'l');
+  fillRect(g, 6, 3, 4, 2, 'b');
+  roundRect(g, 3, 5, 10, 9, 1, 'a');
+  fillRect(g, 5, 8, 6, 4, 'l');
+  fillRect(g, 6, 9, 4, 1, 'b');
+  return outline(g);
+});
+defIcon('syringe', function () {
+  const g = blankGrid();
+  fillRect(g, 1, 6, 2, 4, 'l');
+  fillRect(g, 3, 7, 2, 2, 'b');
+  roundRect(g, 4, 5, 7, 6, 1, 'a');
+  fillRect(g, 5, 7, 5, 2, 'l');
+  linePx(g, 11, 8, 14, 8, 'l');
+  setPx(g, 14, 7, 'l'); setPx(g, 14, 9, 'l');
+  return outline(g);
+});
+defIcon('powder', function () {
+  const g = blankGrid();
+  fillRect(g, 2, 2, 12, 2, 'b');
+  roundRect(g, 3, 4, 10, 10, 1, 'a');
+  setPx(g, 5, 8, 'l'); setPx(g, 6, 8, 'l');
+  setPx(g, 9, 10, 'l'); setPx(g, 5, 11, 'l');
+  return outline(g);
+});
+defIcon('drop', function () {
+  const g = blankGrid();
+  const widths = [1, 3, 3, 5, 5, 7, 9, 9, 9, 7, 7, 5, 3];
+  for (let i = 0; i < widths.length; i++) {
+    const w = widths[i], y = 2 + i;
+    const x0 = Math.round(7.5 - w / 2 + 0.5) - 0;
+    fillRect(g, x0, y, w, 1, 'a');
+  }
+  fillRect(g, 5, 9, 2, 2, 'l');
+  return outline(g);
+});
+defIcon('water', function () {
+  const g = blankGrid();
+  for (let y = 3; y <= 13; y++) { setPx(g, 4, y, 'a'); setPx(g, 11, y, 'a'); }
+  for (let x = 4; x <= 11; x++) { setPx(g, x, 3, 'a'); setPx(g, x, 13, 'a'); }
+  fillRect(g, 5, 9, 6, 4, 'l');
+  fillRect(g, 5, 5, 6, 1, 'b');
+  return outline(g);
+});
+
+/* ---------- 界面图标 ---------- */
+defIcon('bell', function () {
+  const g = blankGrid();
+  const prof = [[6,9],[5,10],[5,10],[4,11],[4,11],[3,12],[3,12],[3,12],[2,13],[2,13]];
+  for (let i = 0; i < prof.length; i++) fillRect(g, prof[i][0], 2 + i, prof[i][1] - prof[i][0] + 1, 1, 'a');
+  fillRect(g, 2, 12, 12, 2, 'b');
+  fillRect(g, 7, 14, 2, 1, 'b');
+  fillRect(g, 7, 1, 2, 1, 'b');
+  return outline(g);
+});
+defIcon('flame', function () {
+  const g = blankGrid();
+  const prof = [[7,8],[6,9],[5,10],[5,11],[4,11],[4,12],[4,12],[5,12],[6,12],[7,11]];
+  for (let i = 0; i < prof.length; i++) fillRect(g, prof[i][0], 4 + i, prof[i][1] - prof[i][0] + 1, 1, 'a');
+  fillRect(g, 6, 10, 4, 3, 'l');
+  fillRect(g, 7, 11, 2, 2, 'w');
+  return outline(g);
+});
+defIcon('flameB', function () {
+  const g = blankGrid();
+  const prof = [[6,8],[6,10],[5,10],[4,11],[4,12],[4,12],[5,12],[5,12],[6,11],[7,10]];
+  for (let i = 0; i < prof.length; i++) fillRect(g, prof[i][0], 4 + i, prof[i][1] - prof[i][0] + 1, 1, 'a');
+  fillRect(g, 6, 10, 4, 3, 'l');
+  fillRect(g, 7, 11, 2, 2, 'w');
+  return outline(g);
+});
+defIcon('check', function () {
+  const g = blankGrid();
+  for (let k = 0; k < 2; k++) {
+    linePx(g, 3 + k, 8, 6 + k, 11, 'a');
+    linePx(g, 6 + k, 11, 12 + k, 4, 'a');
+  }
+  return outline(g);
+});
+defIcon('plus', function () {
+  const g = blankGrid();
+  fillRect(g, 7, 3, 2, 10, 'a');
+  fillRect(g, 3, 7, 10, 2, 'a');
+  return outline(g);
+});
+defIcon('chev-r', function () {
+  const g = blankGrid();
+  for (let k = 0; k < 2; k++) {
+    linePx(g, 6 + k, 3, 11, 7 + k, 'a');
+    linePx(g, 11, 7 + k, 6 + k, 11, 'a');
+  }
+  return outline(g);
+});
+defIcon('chev-l', function () {
+  const g = blankGrid();
+  for (let k = 0; k < 2; k++) {
+    linePx(g, 9 - k, 3, 4, 7 + k, 'a');
+    linePx(g, 4, 7 + k, 9 - k, 11, 'a');
+  }
+  return outline(g);
+});
+defIcon('close', function () {
+  const g = blankGrid();
+  for (let k = -1; k <= 1; k++) {
+    linePx(g, 4 + k, 4, 11 + k, 11, 'a');
+    linePx(g, 11 + k, 4, 4 + k, 11, 'a');
+  }
+  return outline(g);
+});
+defIcon('trash', function () {
+  const g = blankGrid();
+  fillRect(g, 6, 1, 4, 1, 'b');
+  fillRect(g, 3, 3, 10, 2, 'b');
+  roundRect(g, 4, 5, 8, 9, 1, 'a');
+  for (let x = 6; x <= 10; x += 2) fillRect(g, x, 7, 1, 5, 'b');
+  return outline(g);
+});
+defIcon('calendar', function () {
+  const g = blankGrid();
+  roundRect(g, 2, 3, 12, 11, 1, 'a');
+  fillRect(g, 3, 4, 10, 3, 'b');
+  fillRect(g, 4, 1, 2, 2, 'l');
+  fillRect(g, 10, 1, 2, 2, 'l');
+  [[5,9],[8,9],[11,9],[5,11],[8,11],[11,11]].forEach(function (p) { setPx(g, p[0], p[1], 'l'); });
+  return outline(g);
+});
+defIcon('gear', function () {
+  const g = blankGrid();
+  disc(g, 7.5, 7.5, 5, 'a');
+  fillRect(g, 6, 1, 4, 3, 'a');
+  fillRect(g, 6, 12, 4, 3, 'a');
+  fillRect(g, 1, 6, 3, 4, 'a');
+  fillRect(g, 12, 6, 3, 4, 'a');
+  clearRect(g, 6, 6, 4, 4);
+  return outline(g);
+});
+defIcon('box', function () {
+  const g = blankGrid();
+  roundRect(g, 2, 4, 12, 10, 1, 'a');
+  fillRect(g, 3, 5, 10, 2, 'b');
+  fillRect(g, 7, 5, 2, 9, 'l');
+  fillRect(g, 3, 8, 10, 2, 'l');
+  return outline(g);
+});
+defIcon('star', function () {
+  const g = blankGrid();
+  const widths = [1,1,3,3,5,5,7,7,5,5,3,3,1];
+  for (let i = 0; i < widths.length; i++) {
+    const w = widths[i], y = 2 + i;
+    fillRect(g, Math.round(7.5 - w / 2 + 0.5) - 0, y, w, 1, 'a');
+  }
+  fillRect(g, 2, 7, 12, 2, 'a');
+  fillRect(g, 7, 6, 2, 4, 'l');
+  return outline(g);
+});
+defIcon('smile', function () {
+  const g = blankGrid();
+  disc(g, 7.5, 7.5, 5.5, 'a');
+  fillRect(g, 5, 5, 2, 2, 'o');
+  fillRect(g, 9, 5, 2, 2, 'o');
+  [[4,9],[5,10],[6,10],[7,10],[8,10],[9,10],[10,9]].forEach(function (p) { setPx(g, p[0], p[1], 'o'); });
+  return outline(g);
+});
+defIcon('clock', function () {
+  const g = blankGrid();
+  disc(g, 7.5, 7.5, 5.5, 'l');
+  fillRect(g, 7, 4, 1, 4, 'b');
+  fillRect(g, 8, 7, 4, 1, 'b');
+  return outline(g);
+});
+defIcon('undo', function () {
+  const g = blankGrid();
+  fillRect(g, 5, 7, 8, 2, 'a');
+  const head = [[5,5],[4,6],[3,7],[3,8],[4,9],[5,10]];
+  head.forEach(function (p) { setPx(g, p[0], p[1], 'a'); fillRect(g, p[0], p[1], 2, 1, 'a'); });
+  return outline(g);
+});
+defIcon('share', function () {
+  const g = blankGrid();
+  fillRect(g, 10, 2, 3, 3, 'a');
+  fillRect(g, 2, 7, 3, 3, 'a');
+  fillRect(g, 10, 12, 3, 3, 'a');
+  linePx(g, 4, 8, 11, 4, 'b');
+  linePx(g, 5, 9, 11, 13, 'b');
+  return outline(g);
+});
+
+/* ---------- 图标 → SVG ---------- */
+const UI_PAL = { o: LINE_DARK, a: 'currentColor', b: LINE_DARK, l: 'currentColor', w: 'currentColor' };
+
+function spriteSvg(name, size, pal) {
+  const g = iconGrid(name);
+  if (!g) return '';
+  const P = pal || UI_PAL;
+  const colors = {
+    o: P.o || LINE_DARK,
+    a: P.a || 'currentColor',
+    b: P.b || (P.a || 'currentColor'),
+    l: P.l || (P.a || 'currentColor'),
+    w: P.w || '#FFFFFF'
+  };
+  let out = '';
+  for (let y = 0; y < 16; y++) {
+    let x = 0;
+    while (x < 16) {
+      const ch = g[y][x];
+      if (ch === '.') { x++; continue; }
+      let n = 1;
+      while (x + n < 16 && g[y][x + n] === ch) n++;
+      out += '<rect x="' + x + '" y="' + y + '" width="' + n + '" height="1" fill="' + (colors[ch] || '#fff') + '"/>';
+      x += n;
+    }
+  }
+  return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true" focusable="false">' + out + '</svg>';
+}
+function uiIcon(name, size, color) {
+  return spriteSvg(name, size || 16, { o: LINE_DARK, a: color || 'currentColor', b: color || 'currentColor', l: color || 'currentColor', w: color || 'currentColor' });
+}
+function medIcon(kind, size, colorName) {
+  const t = TONES[colorName] || TONES.mint;
+  return spriteSvg(kind, size || 24, { o: LINE_DARK, a: t.main, b: t.dark, l: t.light, w: '#FFFFFF' });
+}
+function bangIcon(name, size, color) {
+  /* 单色实心（用于按钮底色上的图标，如 mint 底上的深色勾） */
+  return spriteSvg(name, size || 16, { o: color || LINE_DARK, a: color || LINE_DARK, b: color || LINE_DARK, l: color || LINE_DARK, w: color || LINE_DARK });
+}
+
+/* 给静态标记里的 [data-icon] 注入 SVG */
+function hydrateIcons(root) {
+  $$('[data-icon]', root || document).forEach(function (el) {
+    const name = el.getAttribute('data-icon');
+    const size = parseInt(el.getAttribute('data-size') || '16', 10);
+    if (el.__ico === name + ':' + size) return;
+    el.innerHTML = uiIcon(name, size);
+    el.__ico = name + ':' + size;
+  });
+}
+/* =====================================================================
+   3. 状态 / 存储
+   ===================================================================== */
+let state = null;
+let uiDate = dateKey(new Date());
+const snoozeUntil = {};   /* doseId -> 时间戳（稍后 10 分钟） */
+const notifiedMap = {};   /* dateKey -> { doseId: 1 } */
+
+function defaultSettings() {
+  return { sound: true, vibrate: true, accent: 'mint', notify: false, remindAfterMiss: true };
+}
+function newMedId() {
+  return 'med_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+}
+function normTime(t) {
+  const p = String(t || '').split(':');
+  const h = clamp(parseInt(p[0], 10) || 0, 0, 23);
+  const m = clamp(parseInt(p[1], 10) || 0, 0, 59);
+  return pad2(h) + ':' + pad2(m);
+}
+function uniqTimes(arr) {
+  const seen = {};
+  const out = [];
+  arr.forEach(function (t) {
+    const v = normTime(t);
+    if (!seen[v]) { seen[v] = 1; out.push(v); }
+  });
+  out.sort(function (a, b) { return parseHM(a) - parseHM(b); });
+  return out;
+}
+
+function sanitizeMed(m) {
+  if (!m || typeof m !== 'object') return null;
+  const name = typeof m.name === 'string' ? m.name.trim().slice(0, 24) : '';
+  if (!name) return null;
+  let times = Array.isArray(m.times)
+    ? m.times.filter(function (t) { return typeof t === 'string' && /^\d{1,2}:\d{2}/.test(t); })
+    : [];
+  times = times.length ? uniqTimes(times) : ['08:00'];
+  let days = Array.isArray(m.days) ? m.days.filter(function (d) { return d >= 1 && d <= 7; }) : [];
+  days = days.length ? Array.from(new Set(days)).sort(function (a, b) { return a - b; }) : ALL_DAYS.slice();
+  return {
+    id: (typeof m.id === 'string' && m.id) ? m.id : newMedId(),
+    name: name,
+    dose: typeof m.dose === 'string' ? m.dose.slice(0, 24) : '',
+    icon: ICON_KINDS.indexOf(m.icon) >= 0 ? m.icon : 'capsule',
+    color: MED_COLORS.indexOf(m.color) >= 0 ? m.color : 'mint',
+    times: times,
+    days: days,
+    note: typeof m.note === 'string' ? m.note.slice(0, 60) : '',
+    createdAt: typeof m.createdAt === 'number' ? m.createdAt : Date.now()
+  };
+}
+
+function loadState() {
+  let raw = null;
+  try { raw = localStorage.getItem(STORE_KEY); } catch (e) { return null; }
+  if (!raw) return null;
+  try {
+    const o = JSON.parse(raw);
+    if (!o || typeof o !== 'object' || !Array.isArray(o.meds) || !o.logs || typeof o.logs !== 'object') return null;
+    const meds = o.meds.map(sanitizeMed).filter(Boolean);
+    const logs = {};
+    Object.keys(o.logs).forEach(function (dk) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) return;
+      const day = o.logs[dk];
+      if (!day || typeof day !== 'object') return;
+      const kept = {};
+      Object.keys(day).forEach(function (k) {
+        const l = day[k];
+        if (!l || typeof l !== 'object') return;
+        if (typeof l.medId !== 'string' || typeof l.time !== 'string') return;
+        kept[k] = {
+          medId: l.medId,
+          time: l.time,
+          date: dk,
+          takenAt: typeof l.takenAt === 'number' ? l.takenAt : null,
+          status: l.status === 'taken' ? 'taken' : 'skipped'
+        };
+      });
+      if (Object.keys(kept).length) logs[dk] = kept;
+    });
+    const raw2 = (o.settings && typeof o.settings === 'object') ? o.settings : {};
+    const settings = {
+      sound: raw2.sound !== false,
+      vibrate: raw2.vibrate !== false,
+      accent: ACCENTS.indexOf(raw2.accent) >= 0 ? raw2.accent : 'mint',
+      notify: !!raw2.notify,
+      remindAfterMiss: raw2.remindAfterMiss !== false
+    };
+    return { meds: meds, logs: logs, settings: settings, seeded: !!o.seeded };
+  } catch (e) {
+    return null;   /* 数据损坏 → 安全回退到演示数据 */
+  }
+}
+
+function save() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* 隐私模式 / 配额满：静默 */ }
+}
+
+/* =====================================================================
+   4. 演示数据（spec §8：4 种药 + 最近 13 天历史 + 今日按时间推进）
+   ===================================================================== */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function demoMeds() {
+  const t = Date.now();
+  return [
+    { id: 'med_demo_d3',  name: '维生素 D3', dose: '800 IU · 1 粒', icon: 'capsule', color: 'gold',  times: ['08:30'],          days: ALL_DAYS.slice(), note: '随早餐吃', createdAt: t - 86400000 * 30 },
+    { id: 'med_demo_met', name: '二甲双胍',  dose: '0.5g · 1 片',   icon: 'tablet',  color: 'mint',  times: ['09:00', '21:00'], days: ALL_DAYS.slice(), note: '',         createdAt: t - 86400000 * 28 },
+    { id: 'med_demo_ca',  name: '钙镁片',    dose: '2 片',          icon: 'tablet',  color: 'lilac', times: ['13:00'],          days: ALL_DAYS.slice(), note: '',         createdAt: t - 86400000 * 26 },
+    { id: 'med_demo_pb',  name: '益生菌',    dose: '1 袋',          icon: 'powder',  color: 'peach', times: ['20:00'],          days: ALL_DAYS.slice(), note: '冷藏保存', createdAt: t - 86400000 * 24 }
+  ];
+}
+function doseListFor(dateObj, meds) {
+  const wi = weekIndex(dateObj);
+  const dk = dateKey(dateObj);
+  const out = [];
+  meds.forEach(function (m) {
+    if (m.days.indexOf(wi) < 0) return;
+    m.times.forEach(function (t) {
+      out.push({ doseId: m.id + '@' + t, medId: m.id, time: t, med: m, date: dk });
+    });
+  });
+  out.sort(function (a, b) {
+    const d = parseHM(a.time) - parseHM(b.time);
+    return d || ((a.med.createdAt || 0) - (b.med.createdAt || 0));
+  });
+  return out;
+}
+function buildDemo() {
+  const rand = mulberry32(20261108);
+  const now = new Date();
+  const meds = demoMeds();
+  const logs = {};
+  const streakLen = 5 + Math.floor(rand() * 5);   /* 5–9 天连击 */
+
+  for (let d = 1; d <= 13; d++) {
+    const dateObj = shiftDay(now, -d);
+    const dk = dateKey(dateObj);
+    const doses = doseListFor(dateObj, meds);
+    const dayLogs = {};
+    const skipIdx = (d <= streakLen) ? -1 : Math.floor(rand() * doses.length);
+    doses.forEach(function (dose, i) {
+      if (i === skipIdx) return;   /* 没记录 = 已错过 */
+      const mins = parseHM(dose.time);
+      const base = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), Math.floor(mins / 60), mins % 60, 0, 0).getTime();
+      const late = rand() < 0.12 ? (98 + Math.floor(rand() * 55)) : Math.floor(rand() * 35);
+      dayLogs[dose.doseId] = { medId: dose.medId, time: dose.time, date: dk, takenAt: base + late * 60000, status: 'taken' };
+    });
+    logs[dk] = dayLogs;
+  }
+
+  /* 今天：只把已经过去的剂次标记为已吃 / 错过，未来的留待吃 */
+  const todayK = dateKey(now);
+  const nowMin = nowMinutes(now);
+  const tDoses = doseListFor(now, meds);
+  const past = tDoses.filter(function (d) { return parseHM(d.time) <= nowMin; });
+  let missedIdx = -1;
+  if (past.length >= 4) missedIdx = past.length - 2;
+  else if (past.length === 3) missedIdx = past.length - 1;
+  const todayLogs = {};
+  past.forEach(function (dose) {
+    if (missedIdx >= 0 && dose === past[missedIdx]) return;
+    const mins = parseHM(dose.time);
+    const base = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(mins / 60), mins % 60, 0, 0).getTime();
+    const elapsed = Math.floor((now.getTime() - base) / 60000);
+    const late = Math.min(Math.floor(rand() * 20) + 2, Math.max(1, elapsed - 1));
+    todayLogs[dose.doseId] = { medId: dose.medId, time: dose.time, date: todayK, takenAt: base + late * 60000, status: 'taken' };
+  });
+  logs[todayK] = todayLogs;
+
+  return { meds: meds, logs: logs, settings: defaultSettings(), seeded: true };
+}
+
+/* =====================================================================
+   5. 派生数据
+   ===================================================================== */
+function getLog(dk, doseId) {
+  const day = state && state.logs ? state.logs[dk] : null;
+  return day ? (day[doseId] || null) : null;
+}
+function ensureLogs(dk) {
+  if (!state.logs[dk]) state.logs[dk] = {};
+  return state.logs[dk];
+}
+function findMed(id) {
+  for (let i = 0; i < state.meds.length; i++) if (state.meds[i].id === id) return state.meds[i];
+  return null;
+}
+function dosesForDate(dateObj) { return doseListFor(dateObj, state.meds); }
+function doseStatus(dose, nowMin) {
+  const log = getLog(dose.date, dose.doseId);
+  if (log && log.status === 'taken') return 'taken';
+  const todayK = dateKey(new Date());
+  const dm = parseHM(dose.time);
+  if (dose.date !== todayK) return dose.date < todayK ? 'missed' : 'todo';
+  const nm = (nowMin == null) ? nowMinutes() : nowMin;
+  if (nm < dm) return 'todo';
+  if (nm < dm + 90) return 'now';
+  return 'missed';
+}
+function isDayComplete(dk) {
+  const doses = dosesForDate(keyToDate(dk));
+  if (!doses.length) return false;
+  return doses.every(function (d) {
+    const l = getLog(dk, d.doseId);
+    return !!(l && l.status === 'taken');
+  });
+}
+function streakDays() {
+  let n = 0;
+  const today = new Date();
+  if (isDayComplete(dateKey(today))) n++;
+  for (let i = 1; i < 120; i++) {
+    const d = shiftDay(today, -i);
+    if (isDayComplete(dateKey(d))) n++;
+    else break;
+  }
+  return n;
+}
+function doseBaseTs(dk, timeStr) {
+  const d = keyToDate(dk);
+  const mins = parseHM(timeStr);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(mins / 60), mins % 60, 0, 0).getTime();
+}
+function onTimeRate() {
+  let taken = 0, ontime = 0;
+  Object.keys(state.logs).forEach(function (dk) {
+    const day = state.logs[dk];
+    if (!day) return;
+    Object.keys(day).forEach(function (k) {
+      const l = day[k];
+      if (!l || l.status !== 'taken') return;
+      taken++;
+      if (typeof l.takenAt === 'number' && (l.takenAt - doseBaseTs(dk, l.time)) <= 90 * 60000) ontime++;
+    });
+  });
+  return taken ? Math.round(ontime / taken * 100) : 0;
+}
+function monthTakenCount(y, m) {
+  let n = 0;
+  Object.keys(state.logs).forEach(function (dk) {
+    const d = keyToDate(dk);
+    if (d.getFullYear() !== y || d.getMonth() !== m) return;
+    const day = state.logs[dk] || {};
+    Object.keys(day).forEach(function (k) {
+      const l = day[k];
+      if (l && l.status === 'taken') n++;
+    });
+  });
+  return n;
+}
+function dailyDoseCount() {
+  return state.meds.reduce(function (n, m) { return n + m.times.length; }, 0);
+}
+function dayInfo(dk, dateObj, todayK) {
+  const doses = dosesForDate(dateObj);
+  if (!doses.length) return { state: 'none', rec: false, taken: 0, total: 0 };
+  const nowMin = nowMinutes();
+  let taken = 0, missed = 0;
+  doses.forEach(function (d) {
+    const l = getLog(dk, d.doseId);
+    if (l && l.status === 'taken') { taken++; return; }
+    if (doseStatus(d, nowMin) === 'missed') missed++;
+  });
+  let st = 'none';
+  if (taken === doses.length) st = 'full';
+  else if (missed > 0) st = 'miss';
+  else if (taken > 0) st = 'part';
+  return { state: st, rec: (taken > 0 || missed > 0), taken: taken, total: doses.length, missed: missed };
+}
+function pickNextDose(doses, nowMin) {
+  for (let i = 0; i < doses.length; i++) {
+    const d = doses[i];
+    const s = doseStatus(d, nowMin);
+    if (s === 'taken') continue;
+    const until = snoozeUntil[d.doseId];
+    if (until && until > Date.now()) return { dose: d, status: 'snooze', until: until };
+    return { dose: d, status: s };
+  }
+  return null;
+}
+/* =====================================================================
+   6. 渲染
+   ===================================================================== */
+let histMonthY = new Date().getFullYear();
+let histMonthM = new Date().getMonth();
+
+function fmtDur(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return pad2(Math.floor(s / 3600)) + ':' + pad2(Math.floor((s % 3600) / 60)) + ':' + pad2(s % 60);
+}
+function hhmmOf(ts) {
+  const d = new Date(ts);
+  return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+function flameHTML() {
+  return '<span class="flame"><span class="fa">' + uiIcon('flame', 16, '#FFD166') + '</span>'
+    + '<span class="fb">' + uiIcon('flameB', 16, '#FFD166') + '</span></span>';
+}
+
+/* ---------------- 今日 ---------------- */
+function renderToday() {
+  const now = new Date();
+  const nowMin = nowMinutes(now);
+  const doses = dosesForDate(now);
+  const statuses = doses.map(function (d) { return doseStatus(d, nowMin); });
+  const taken = statuses.filter(function (s) { return s === 'taken'; }).length;
+  const total = doses.length;
+  const sk = streakDays();
+
+  $('#today-sub').textContent = monthDayCN(now) + ' 周' + weekdayCN(now) + ' · ' + greetingOf(now);
+  $('#ov-frac').textContent = taken + '/' + total;
+  $('#ov-streak').innerHTML = sk > 0
+    ? flameHTML() + '<b>' + sk + '</b><span>天连续</span>'
+    : '<span style="font-size:11px;color:var(--text-mute)">今天开始连击</span>';
+
+  const segs = total <= 8 ? 8 : Math.min(12, total);
+  const onCount = total ? Math.round((taken / total) * segs) : 0;
+  let bar = '';
+  for (let i = 0; i < segs; i++) bar += '<i class="' + (i < onCount ? 'on' : '') + '"></i>';
+  $('#ov-bar').innerHTML = bar;
+
+  $('#next-card').innerHTML = nextCardHTML(doses, nowMin, total, sk);
+
+  const rows = doses.map(function (d, i) { return doseRowHTML(d, statuses[i]); });
+  $('#list-sec').classList.toggle('hidden', total === 0);
+  $('#list-meta').textContent = total ? (taken + '/' + total + ' 已吃') : '';
+  $('#dose-list').innerHTML = rows.join('');
+
+  $('#today-foot').innerHTML = total
+    ? '已吃 ' + taken + ' 剂 · 还剩 ' + (total - taken) + ' 剂<br>网页版需保持页面打开才能按时提醒'
+    : '像素药盒 · 数据只保存在本机';
+}
+
+function nextCardHTML(doses, nowMin, total, sk) {
+  heroTarget = null;
+  if (!total) {
+    return '<div class="empty">'
+      + '<div class="ill">' + uiIcon('bottle', 30, '#B6A4E0') + '</div>'
+      + '<h3>还没有药品</h3>'
+      + '<p>添加第一种药，设好提醒时间，随时来打卡</p>'
+      + '<button class="btn-ghost btn-mint" type="button" id="empty-add">' + uiIcon('plus', 14, LINE_DARK) + '添加第一种药</button>'
+      + '</div>';
+  }
+  const next = pickNextDose(doses, nowMin);
+  if (!next) {
+    return '<div class="card hero done">'
+      + '<div class="done-wrap">'
+      + '<div class="done-ill">' + uiIcon('smile', 30, '#5CF2B6') + '</div>'
+      + '<div class="done-txt"><p class="done-t">今天的药都吃完啦</p>'
+      + '<p class="done-s">明天见 &middot; 已连续 ' + sk + ' 天</p></div>'
+      + '<div class="done-stars">' + uiIcon('star', 16, '#FFD166') + '</div>'
+      + '</div></div>';
+  }
+
+  const dose = next.dose;
+  const med = dose.med;
+  let statusCls = '', statusHTML = '', cardCls = 'card hero';
+  if (next.status === 'snooze') {
+    heroTarget = next.until;
+    statusHTML = '<span class="cn">稍后</span> <span class="num" id="hero-countdown">' + fmtDur(next.until - Date.now()) + '</span>';
+  } else if (next.status === 'todo') {
+    heroTarget = doseBaseTs(dose.date, dose.time);
+    statusHTML = '<span class="cn">还有</span> <span class="num" id="hero-countdown">' + fmtDur(heroTarget - Date.now()) + '</span>';
+  } else if (next.status === 'missed') {
+    statusHTML = '<span class="cn">已错过</span>';
+    statusCls = ' late';
+    cardCls += ' is-late';
+  } else {
+    statusHTML = '<span class="cn">就是现在</span>';
+    statusCls = ' due';
+    cardCls += ' is-due';
+  }
+
+  const btnTxt = (next.status === 'missed') ? '补卡' : '打卡';
+  return '<div class="' + cardCls + '">'
+    + '<div class="hero-top"><span class="ls">NEXT DOSE</span>'
+    + '<span class="hero-status' + statusCls + '">' + statusHTML + '</span></div>'
+    + '<div class="hero-main">'
+    + '<div class="med-tile">' + medIcon(med.icon, 32, med.color) + '</div>'
+    + '<div class="hero-info">'
+    + '<div class="hero-time">' + dose.time + '</div>'
+    + '<div class="hero-name">' + esc(med.name) + '</div>'
+    + '<div class="hero-dose">' + esc(med.dose || '按医嘱服用') + '</div>'
+    + '</div></div>'
+    + '<div class="hero-actions">'
+    + '<div class="cut-wrap"><span class="cut-shadow"></span>'
+    + '<button class="cut-btn" type="button" data-act="check" data-dose-id="' + esc(dose.doseId) + '">' + btnTxt + '</button></div>'
+    + '<button class="btn-ghost" type="button" data-act="snooze" data-dose-id="' + esc(dose.doseId) + '">稍后 10 分钟</button>'
+    + '</div></div>';
+}
+
+function doseRowHTML(dose, status) {
+  const med = dose.med;
+  const log = getLog(dose.date, dose.doseId);
+  let statusTxt = '待吃';
+  if (status === 'taken') statusTxt = log && log.takenAt ? ('已吃 ' + hhmmOf(log.takenAt)) : '已吃';
+  else if (status === 'now') statusTxt = '现在';
+  else if (status === 'missed') statusTxt = '已错过';
+  let chk;
+  if (status === 'taken') {
+    chk = '<button class="chk" type="button" data-check="' + esc(dose.doseId) + '" data-on="1" aria-label="取消打卡">' + bangIcon('check', 20, LINE_DARK) + '</button>';
+  } else if (status === 'missed') {
+    chk = '<button class="chk" type="button" data-check="' + esc(dose.doseId) + '" data-late="1" aria-label="补打卡"><span class="chk-word">补</span></button>';
+  } else {
+    chk = '<button class="chk" type="button" data-check="' + esc(dose.doseId) + '" aria-label="打卡"></button>';
+  }
+  return '<div class="dose-row" data-dose-id="' + esc(dose.doseId) + '" data-status="' + status + '">'
+    + '<div class="dose-time"><span class="dose-time-txt">' + dose.time + '</span><span class="dose-st">' + statusTxt + '</span></div>'
+    + '<div class="dose-mid">' + medIcon(med.icon, 24, med.color)
+    + '<div class="dose-meta"><p class="dose-name">' + esc(med.name) + '</p><p class="dose-dose">' + esc(med.dose || '') + '</p></div>'
+    + '</div>' + chk + '</div>';
+}
+
+/* ---------------- 药箱 ---------------- */
+function daysLabel(days) {
+  if (!days || !days.length) return '未设置';
+  if (days.length === 7) return '每天';
+  const s = days.slice().sort(function (a, b) { return a - b; });
+  if (s.length === 5 && s.join('') === '12345') return '工作日';
+  if (s.length === 2 && s.join('') === '67') return '周末';
+  return '周' + s.map(function (d) { return WEEK_CN[d - 1]; }).join('');
+}
+function renderCabinet() {
+  const wrap = $('#cab-list');
+  const meds = state.meds;
+  $('#cab-sub').textContent = meds.length
+    ? (meds.length + ' 种 · 每日 ' + dailyDoseCount() + ' 剂')
+    : '还没有药品';
+  if (!meds.length) {
+    wrap.innerHTML = '<div class="empty">'
+      + '<div class="ill">' + uiIcon('box', 30, '#B6A4E0') + '</div>'
+      + '<h3>药箱空空</h3>'
+      + '<p>把常吃的药加进来，设好时间，今天就能开始打卡</p>'
+      + '<button class="btn-ghost btn-mint" type="button" id="empty-add">' + uiIcon('plus', 14, LINE_DARK) + '添加药品</button>'
+      + '</div>';
+    return;
+  }
+  wrap.innerHTML = meds.map(function (m) {
+    const t = TONES[m.color] || TONES.mint;
+    const chips = m.times.map(function (tt) {
+      return '<span class="chip"><span class="num">' + tt + '</span></span>';
+    }).join('');
+    return '<button class="med-card" type="button" data-med-id="' + esc(m.id) + '" style="--c:' + t.main + '">'
+      + '<span class="strip"></span>'
+      + '<span class="med-tile-sm">' + medIcon(m.icon, 24, m.color) + '</span>'
+      + '<span class="med-main">'
+      + '<span class="med-name">' + esc(m.name) + '</span>'
+      + '<span class="med-dose">' + esc(m.dose || '未填剂量') + '</span>'
+      + '<span class="chips">' + chips + '<span class="chip">' + daysLabel(m.days) + '</span></span>'
+      + '</span>'
+      + '<span class="med-chev">' + uiIcon('chev-r', 16) + '</span>'
+      + '</button>';
+  }).join('');
+}
+
+/* ---------------- 记录 ---------------- */
+function renderHistory() {
+  const now = new Date();
+  const y = histMonthY, m = histMonthM;
+  const first = new Date(y, m, 1);
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const lead = weekIndex(first) - 1;
+  const isCurMonth = (y === now.getFullYear() && m === now.getMonth());
+  const todayK = dateKey(now);
+
+  $('#cal-month').innerHTML = '<span class="num">' + y + '</span><span>年</span>'
+    + '<span class="num">' + (m + 1) + '</span><span>月</span>';
+  $('#cal-next').disabled = isCurMonth;
+
+  $('#cal-wd').innerHTML = WEEK_CN.map(function (w) { return '<span class="cal-wd">' + w + '</span>'; }).join('');
+
+  let cells = '';
+  for (let i = 0; i < lead; i++) cells += '<div class="cal-cell" data-empty="1"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateObj = new Date(y, m, d);
+    const dk = dateKey(dateObj);
+    const future = dk > todayK;
+    const info = future ? { state: 'none', rec: false } : dayInfo(dk, dateObj, todayK);
+    const rec = !future && info.rec;
+    cells += '<button class="cal-cell" type="button" data-date="' + dk + '"'
+      + ' data-rec="' + (rec ? '1' : '0') + '" data-today="' + (dk === todayK ? '1' : '0') + '"'
+      + (rec ? '' : ' disabled') + '>'
+      + '<span class="blk" data-s="' + info.state + '">' + (info.state === 'full' ? bangIcon('check', 14, LINE_DARK) : '') + '</span>'
+      + '<span class="dnum">' + d + '</span></button>';
+  }
+  $('#cal-grid').innerHTML = cells;
+
+  $('#cal-legend').innerHTML = '<span class="lg"><i data-s="full"></i>完成</span>'
+    + '<span class="lg"><i data-s="part"></i>部分</span>'
+    + '<span class="lg"><i data-s="miss"></i>错过</span>';
+
+  const rate = onTimeRate();
+  const sk = streakDays();
+  const mc = monthTakenCount(now.getFullYear(), now.getMonth());
+  $('#stats').innerHTML =
+    '<div class="stat s-mint"><span class="v">' + rate + '<span class="u">%</span></span><span class="k">按时率</span></div>'
+    + '<div class="stat s-gold"><span class="v">' + sk + '<span class="u">天</span></span><span class="k">连续打卡</span></div>'
+    + '<div class="stat s-lilac"><span class="v">' + mc + '<span class="u">次</span></span><span class="k">本月完成</span></div>';
+
+  let bars = '', sumTaken = 0, sumDoses = 0;
+  for (let i = 6; i >= 0; i--) {
+    const dObj = shiftDay(now, -i);
+    const dk = dateKey(dObj);
+    const doses = dosesForDate(dObj);
+    let takenN = 0;
+    doses.forEach(function (d) {
+      const l = getLog(dk, d.doseId);
+      if (l && l.status === 'taken') takenN++;
+    });
+    const ratio = doses.length ? takenN / doses.length : 0;
+    sumTaken += takenN;
+    sumDoses += doses.length;
+    const isToday = dk === todayK;
+    bars += '<div class="bcol" data-today="' + (isToday ? '1' : '0') + '">'
+      + '<span class="btrack"><i class="bfill" style="height:' + Math.round(64 * ratio) + 'px"></i></span>'
+      + '<span class="blab">' + (isToday ? '今' : weekdayCN(dObj)) + '</span></div>';
+  }
+  $('#chart').innerHTML = bars;
+  const pct = sumDoses ? Math.round(sumTaken / sumDoses * 100) : 0;
+  $('#chart-meta').textContent = '完成率 ' + pct + '%';
+  $('#chart-foot').innerHTML = '<span class="cf-t">近 7 天完成 ' + sumTaken + '/' + sumDoses + ' 剂</span>'
+    + '<span class="cf-v">' + pct + '%</span>';
+
+  $('#hist-sub').textContent = '按时率 ' + rate + '% · 连续 ' + sk + ' 天';
+}
+
+/* ---------------- 设置 ---------------- */
+function switchRow(label, sub, key, checked) {
+  return '<div class="srow"><div class="srow-l"><div class="srow-t">' + label + '</div>'
+    + (sub ? '<div class="srow-s">' + sub + '</div>' : '') + '</div>'
+    + '<div class="srow-r"><button class="switch" type="button" role="switch" aria-checked="' + (checked ? 'true' : 'false') + '" data-toggle="' + key + '" aria-label="' + label + '">'
+    + '<span class="tr"><span class="kb"></span></span></button></div></div>';
+}
+function renderSettings() {
+  const s = state.settings;
+  const canNotify = ('Notification' in window);
+  let notifySub = '到点弹网页提醒 + 系统通知';
+  if (!canNotify) notifySub = '当前浏览器不支持通知，仍会弹页面横幅';
+  else if (Notification.permission === 'denied') notifySub = '已被浏览器拒绝，请在站点设置里允许';
+  else if (Notification.permission === 'granted' && s.notify) notifySub = '已允许系统通知';
+
+  let html = '';
+  html += '<div class="grp">'
+    + '<div class="grp-h">' + uiIcon('bell', 16) + '<h2>提醒</h2></div>'
+    + switchRow('允许通知', notifySub, 'notify', s.notify && canNotify)
+    + switchRow('声音', '打卡与提醒的方波铃声', 'sound', s.sound)
+    + switchRow('震动', '打卡时轻轻震一下', 'vibrate', s.vibrate)
+    + switchRow('错过后再提醒一次', '错过 15 分钟后再响一次', 'remindAfterMiss', s.remindAfterMiss)
+    + '<div class="srow"><button class="btn-ghost wide" type="button" data-act="test-remind">' + uiIcon('bell', 14) + '试听提醒</button></div>'
+    + '</div>';
+
+  html += '<div class="grp">'
+    + '<div class="grp-h">' + uiIcon('star', 16) + '<h2>外观</h2></div>'
+    + '<div class="srow"><div class="srow-l"><div class="srow-t">强调色</div><div class="srow-s">影响主要按钮和高亮</div></div></div>'
+    + '<div class="accent-row">' + ACCENTS.map(function (k) {
+      const t = TONES[k];
+      return '<button class="acc" type="button" data-accent="' + k + '" aria-pressed="' + (s.accent === k ? 'true' : 'false') + '"'
+        + ' style="--c:' + t.main + '" aria-label="' + k + '"><i></i></button>';
+    }).join('') + '</div></div>';
+
+  html += '<div class="grp">'
+    + '<div class="grp-h">' + uiIcon('box', 16) + '<h2>数据</h2></div>'
+    + '<div class="srow tap" data-act="export"><div class="srow-l"><div class="srow-t">导出数据</div><div class="srow-s">下载一份 JSON 备份</div></div>'
+    + '<div class="srow-r">' + uiIcon('share', 16) + '</div></div>'
+    + '<div class="srow tap" data-act="clear"><div class="srow-l"><div class="srow-t" style="color:var(--peach)">清空所有数据</div>'
+    + '<div class="srow-s">药品与打卡记录都会被删掉</div></div>'
+    + '<div class="srow-r">' + uiIcon('trash', 16) + '</div></div>'
+    + '</div>';
+
+  html += '<div class="grp">'
+    + '<div class="grp-h">' + uiIcon('gear', 16) + '<h2>关于</h2></div>'
+    + '<div class="about-name"><span class="an">像素药盒</span><span class="av">PIXEL DOSE v1.0.0</span></div>'
+    + '<div class="about-lines">'
+    + '<p>字体：Fusion Pixel 12px / Press Start 2P（OFL 许可）</p>'
+    + '<p>深色像素风 · 零依赖 · 单文件离线可用</p>'
+    + '<p>网页版需保持页面打开；真正可靠的后台提醒请用 iOS 原生版。</p>'
+    + '</div></div>';
+
+  html += '<div class="grp">'
+    + '<div class="grp-h">' + uiIcon('share', 16) + '<h2>添加到主屏幕</h2></div>'
+    + '<div class="about-lines">'
+    + '<p>iPhone：Safari 底部「分享」&rarr; 「添加到主屏幕」，之后从桌面图标进入即为全屏。</p>'
+    + '<p>Android：浏览器菜单 &rarr; 「添加到主屏幕」。</p>'
+    + '<p>加到主屏后不会带着浏览器地址栏，观感更接近原生 App。</p>'
+    + '</div></div>';
+
+  html += '<p class="foot-note">像素药盒 v1.0.0 · 本机存储 localStorage[' + STORE_KEY + ']</p>';
+
+  $('#settings-body').innerHTML = html;
+  $('#set-sub').textContent = '提醒 · 外观 · 数据';
+}
+
+function renderAll() {
+  renderToday();
+  renderCabinet();
+  renderHistory();
+  renderSettings();
+  hydrateIcons();
+  const d = new Date();
+  $('#sb-time').textContent = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+/* =====================================================================
+   7. tab / toast / 像素弹窗 / 粒子
+   ===================================================================== */
+let currentTab = 'today';
+let heroTarget = null;
+
+function switchTab(name) {
+  if (['today', 'cabinet', 'history', 'settings'].indexOf(name) < 0) return;
+  currentTab = name;
+  $$('.tab').forEach(function (b) {
+    b.setAttribute('aria-selected', b.getAttribute('data-tab') === name ? 'true' : 'false');
+  });
+  $$('.view').forEach(function (v) {
+    v.setAttribute('data-active', v.id === 'view-' + name ? 'true' : 'false');
+  });
+  const v = $('#view-' + name);
+  if (v) v.scrollTop = 0;
+  if (name === 'today') renderToday();
+  else if (name === 'cabinet') renderCabinet();
+  else if (name === 'history') renderHistory();
+  else renderSettings();
+  hydrateIcons();
+}
+
+function toast(text, kind, opts) {
+  opts = opts || {};
+  const host = $('#toasts');
+  if (!host) return null;
+  const d = document.createElement('div');
+  d.className = 'toast' + (kind ? ' ' + kind : '');
+  const icoColor = (kind === 'plain') ? '#5CF2B6' : LINE_DARK;
+  d.innerHTML = '<span class="t-ico">' + uiIcon(opts.icon || 'check', 16, icoColor) + '</span>'
+    + '<span class="t-txt">' + esc(text) + '</span>'
+    + (opts.action ? '<button class="t-act" type="button">' + esc(opts.action) + '</button>' : '');
+  host.appendChild(d);
+  function kill() {
+    if (!d.parentNode) return;
+    d.classList.add('out');
+    setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 190);
+  }
+  const timer = setTimeout(kill, opts.ttl || 2400);
+  if (opts.action && opts.onAction) {
+    const b = d.querySelector('.t-act');
+    if (b) b.addEventListener('click', function () { clearTimeout(timer); kill(); opts.onAction(); });
+  }
+  return d;
+}
+
+function dialog(opts) {
+  opts = opts || {};
+  return new Promise(function (resolve) {
+    const m = $('#modal');
+    m.innerHTML = '<div class="dialog">'
+      + '<h3>' + (opts.icon ? '<span class="dico">' + uiIcon(opts.icon, 20, opts.danger ? '#FF9D7A' : '#FFD166') + '</span>' : '')
+      + esc(opts.title || '确认') + '</h3>'
+      + '<p>' + (opts.body || '') + '</p>'
+      + '<div class="acts">'
+      + '<button class="btn-ghost" type="button" data-ok="0">' + esc(opts.cancel || '取消') + '</button>'
+      + '<button class="btn-ghost ' + (opts.danger ? 'btn-peach' : 'btn-mint') + '" type="button" data-ok="1">' + esc(opts.ok || '确定') + '</button>'
+      + '</div></div>';
+    m.setAttribute('data-open', 'true');
+    function done(v) {
+      m.setAttribute('data-open', 'false');
+      m.innerHTML = '';
+      m.onclick = null;
+      resolve(v);
+    }
+    m.onclick = function (ev) {
+      const b = ev.target.closest ? ev.target.closest('[data-ok]') : null;
+      if (b) { done(b.getAttribute('data-ok') === '1'); return; }
+      if (ev.target === m) done(false);
+    };
+  });
+}
+
+function burstParticles(anchor) {
+  const fx = $('#fx');
+  if (!fx) return;
+  let x = window.innerWidth / 2, y = 180;
+  if (anchor && anchor.getBoundingClientRect) {
+    const r = anchor.getBoundingClientRect();
+    x = r.left + r.width / 2;
+    y = r.top + r.height / 2;
+  }
+  const cols = ['#5CF2B6', '#FFD166', '#FFFFFF', '#B388FF'];
+  for (let i = 0; i < 12; i++) {
+    const p = document.createElement('i');
+    p.className = 'pt';
+    const ang = (Math.PI * 2 * i / 12) + (Math.random() * 0.5 - 0.25);
+    const dist = 26 + Math.random() * 32;
+    p.style.left = (x - 1.5) + 'px';
+    p.style.top = (y - 1.5) + 'px';
+    p.style.background = cols[i % cols.length];
+    p.style.setProperty('--dx', Math.round(Math.cos(ang) * dist) + 'px');
+    p.style.setProperty('--dy', Math.round(Math.sin(ang) * dist) + 'px');
+    p.style.animationDelay = ((i % 4) * 18) + 'ms';
+    fx.appendChild(p);
+    (function (el) {
+      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 700);
+    })(p);
+  }
+}
+
+/* =====================================================================
+   8. 音效（WebAudio 方波）
+   ===================================================================== */
+let actx = null;
+let ringTimer = null;
+
+function audioCtx() {
+  if (actx) return actx;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    actx = new AC();
+  } catch (e) { actx = null; }
+  return actx;
+}
+function playNote(ctx, freq, at, dur, vol) {
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = 'square';
+  o.frequency.setValueAtTime(freq, at);
+  g.gain.setValueAtTime(0.0001, at);
+  g.gain.linearRampToValueAtTime(vol, at + 0.006);
+  g.gain.linearRampToValueAtTime(0.0001, at + dur);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(at); o.stop(at + dur + 0.03);
+}
+function chime(loop) {
+  if (!state || !state.settings.sound) return;
+  const ctx = audioCtx();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+  const notes = [880, 1174, 1568];
+  const t0 = ctx.currentTime + 0.03;
+  const reps = loop ? 4 : 1;
+  for (let r = 0; r < reps; r++) {
+    for (let i = 0; i < notes.length; i++) {
+      playNote(ctx, notes[i], t0 + (r * notes.length + i) * 0.09, 0.075, 0.09);
+    }
+  }
+}
+function startRing() {
+  stopRing();
+  chime(true);
+  ringTimer = setInterval(function () { chime(true); }, 1400);
+  setTimeout(stopRing, 8200);
+}
+function stopRing() {
+  if (ringTimer) { clearInterval(ringTimer); ringTimer = null; }
+}
+function vibrate(ms) {
+  if (!state || !state.settings.vibrate) return;
+  try { if (navigator.vibrate) navigator.vibrate(ms || 22); } catch (e) {}
+}
+
+/* =====================================================================
+   9. 打卡 / 取消 / 补卡 / 稍后
+   ===================================================================== */
+function doseByDoseId(doseId, dateStr) {
+  const dk = dateStr || dateKey(new Date());
+  const doses = dosesForDate(keyToDate(dk));
+  for (let i = 0; i < doses.length; i++) if (doses[i].doseId === doseId) return doses[i];
+  return null;
+}
+function refreshAfterDoseChange() {
+  renderToday();
+  renderCabinet();
+  renderHistory();
+}
+function checkDose(doseId, anchor) {
+  const dose = doseByDoseId(doseId);
+  if (!dose) return false;
+  const log = getLog(dose.date, dose.doseId);
+  if (log && log.status === 'taken') return true;
+  const wasMissed = doseStatus(dose) === 'missed';
+  ensureLogs(dose.date)[dose.doseId] = {
+    medId: dose.medId, time: dose.time, date: dose.date, takenAt: Date.now(), status: 'taken'
+  };
+  delete snoozeUntil[dose.doseId];
+  save();
+  refreshAfterDoseChange();
+  burstParticles(anchor);
+  chime(false);
+  vibrate(22);
+  toast((wasMissed ? '补卡成功 · ' : '打卡成功 · ') + dose.med.name, 'mint', { icon: 'check' });
+  if (isDayComplete(dose.date)) {
+    setTimeout(function () { toast('今日全部完成 · 干得好', 'gold', { icon: 'star', ttl: 2200 }); }, 420);
+  }
+  return true;
+}
+function uncheckDose(doseId) {
+  const dose = doseByDoseId(doseId);
+  if (!dose) return false;
+  const day = state.logs[dose.date];
+  if (!day || !day[dose.doseId]) return false;
+  const medName = dose.med.name;
+  delete day[dose.doseId];
+  if (!Object.keys(day).length) delete state.logs[dose.date];
+  save();
+  refreshAfterDoseChange();
+  vibrate(12);
+  toast('已取消打卡 · ' + medName, 'peach', {
+    icon: 'undo', ttl: 2800, action: '撤销',
+    onAction: function () { checkDose(doseId); }
+  });
+  return true;
+}
+function toggleCheck(doseId, anchor) {
+  const dose = doseByDoseId(doseId);
+  if (!dose) return;
+  const log = getLog(dose.date, dose.doseId);
+  if (log && log.status === 'taken') uncheckDose(doseId);
+  else checkDose(doseId, anchor);
+}
+function snoozeDose(doseId) {
+  const dose = doseByDoseId(doseId);
+  if (!dose) return;
+  snoozeUntil[doseId] = Date.now() + 10 * 60000;
+  renderToday();
+  toast('已稍后 10 分钟 · ' + dose.med.name, 'plain', { icon: 'clock', ttl: 2200 });
+}
+
+/* =====================================================================
+   10. 提醒横幅 / 系统通知
+   ===================================================================== */
+function showBanner(dose, ring) {
+  const b = $('#banner');
+  if (!b) return;
+  const med = dose.med;
+  b.innerHTML = '<div class="bn">'
+    + '<div class="bn-top"><span class="bn-lab">REMINDER</span>'
+    + '<button class="bn-x" type="button" data-act="banner-close" aria-label="关闭提醒">' + uiIcon('close', 14) + '</button></div>'
+    + '<div class="bn-main">'
+    + '<span class="bn-tile">' + medIcon(med.icon, 22, med.color) + '</span>'
+    + '<span class="bn-info"><span class="bn-time">' + dose.time + '</span>'
+    + '<span class="bn-name">' + esc(med.name) + '</span>'
+    + '<span class="bn-dose">' + esc(med.dose || '') + (med.dose ? ' · ' : '') + '该吃药了</span></span>'
+    + '</div>'
+    + '<div class="bn-acts">'
+    + '<button class="btn-ghost btn-mint" type="button" data-act="banner-take" data-dose-id="' + esc(dose.doseId) + '">打卡</button>'
+    + '<button class="btn-ghost" type="button" data-act="banner-close">稍后</button>'
+    + '</div></div>';
+  b.setAttribute('data-open', 'true');
+  if (ring !== false) startRing();
+  notifySystem('该吃药了', dose.time + ' · ' + med.name + (med.dose ? ' ' + med.dose : ''));
+}
+function hideBanner() {
+  const b = $('#banner');
+  if (b) { b.setAttribute('data-open', 'false'); b.innerHTML = ''; }
+  stopRing();
+}
+function notifySystem(title, body) {
+  if (!state || !state.settings.notify) return;
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  try { new Notification(title, { body: body, tag: 'pixel-dose' }); } catch (e) {}
+}
+function checkDue(now) {
+  const dk = dateKey(now);
+  if (!notifiedMap[dk]) notifiedMap[dk] = {};
+  const doses = dosesForDate(now);
+  const secs = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+  for (let i = 0; i < doses.length; i++) {
+    const dose = doses[i];
+    if (notifiedMap[dk][dose.doseId]) continue;
+    const log = getLog(dk, dose.doseId);
+    if (log && log.status === 'taken') continue;
+    const diff = secs - parseHM(dose.time) * 60;
+    if (diff >= -30 && diff <= 30) {
+      notifiedMap[dk][dose.doseId] = 1;
+      showBanner(dose);
+      return;
+    }
+    if (state.settings.remindAfterMiss && diff > 900 - 30 && diff < 900 + 30) {
+      notifiedMap[dk][dose.doseId] = 1;
+      showBanner(dose);
+      return;
+    }
+  }
+}
+
+/* =====================================================================
+   11. 某天明细 sheet
+   ===================================================================== */
+function openDaySheet(dk) {
+  const dateObj = keyToDate(dk);
+  const doses = dosesForDate(dateObj);
+  const nowMin = nowMinutes();
+  const statuses = doses.map(function (d) { return doseStatus(d, nowMin); });
+  const taken = statuses.filter(function (s) { return s === 'taken'; }).length;
+  const missed = statuses.filter(function (s) { return s === 'missed'; }).length;
+  let body = '<div class="det-sum"><span>' + (dateObj.getMonth() + 1) + '月' + dateObj.getDate() + '日 · 周' + weekdayCN(dateObj) + '</span>'
+    + '<span>' + taken + '/' + doses.length + ' 已吃' + (missed ? ' · ' + missed + ' 错过' : '') + '</span></div>';
+  if (!doses.length) {
+    body += '<p class="tiny">这一天没有需要服用的药。</p>';
+  }
+  doses.forEach(function (dose, i) {
+    const s = statuses[i];
+    let tag = '<span class="det-tag p">待吃</span>';
+    if (s === 'taken') tag = '<span class="det-tag t">已吃</span>';
+    else if (s === 'missed') tag = '<span class="det-tag m">错过</span>';
+    else if (s === 'now') tag = '<span class="det-tag t">现在</span>';
+    body += '<div class="det-row"><span class="det-time">' + dose.time + '</span>'
+      + '<span class="det-main"><span class="det-name">' + esc(dose.med.name) + '</span>'
+      + '<span class="det-dose">' + esc(dose.med.dose || '') + '</span></span>' + tag + '</div>';
+  });
+  const sh = $('#sheet');
+  sh.innerHTML = '<div class="sheet-h"><div><h3>' + (dateObj.getMonth() + 1) + '月' + dateObj.getDate() + '日 记录</h3>'
+    + '<div class="dsub">' + taken + '/' + doses.length + ' 剂已完成</div></div>'
+    + '<button class="sheet-x" type="button" data-act="sheet-close" aria-label="关闭">' + uiIcon('close', 14) + '</button></div>'
+    + '<div class="sheet-body">' + body + '</div>';
+  sh.setAttribute('data-open', 'true');
+  $('#scrim').setAttribute('data-open', 'true');
+}
+function closeSheet() {
+  const sh = $('#sheet');
+  if (sh) sh.setAttribute('data-open', 'false');
+  $('#scrim').setAttribute('data-open', 'false');
+}
+
+/* =====================================================================
+   12. 药品编辑层
+   ===================================================================== */
+let editing = null;
+
+function cloneMed(m) {
+  return {
+    id: m.id, name: m.name, dose: m.dose, icon: m.icon, color: m.color,
+    times: m.times.slice(), days: m.days.slice(), note: m.note || ''
+  };
+}
+function openEditor(med) {
+  editing = med ? cloneMed(med) : {
+    id: null, name: '', dose: '', icon: 'capsule', color: 'mint',
+    times: ['08:00'], days: ALL_DAYS.slice(), note: ''
+  };
+  $('#ed-title').textContent = med ? '编辑药品' : '新增药品';
+  renderEditorBody();
+  const ed = $('#editor');
+  ed.classList.remove('closing');
+  ed.setAttribute('data-open', 'true');
+  const body = $('#ed-body');
+  if (body) body.scrollTop = 0;
+}
+function closeEditor() {
+  const ed = $('#editor');
+  if (!ed || ed.getAttribute('data-open') !== 'true') { editing = null; return; }
+  ed.classList.add('closing');
+  setTimeout(function () {
+    ed.setAttribute('data-open', 'false');
+    ed.classList.remove('closing');
+    editing = null;
+  }, 180);
+}
+function pickerHTML() {
+  const d = editing;
+  const icons = ICON_KINDS.map(function (k) {
+    return '<button class="opt" type="button" data-pick-icon="' + k + '" aria-pressed="' + (d.icon === k) + '" aria-label="图标 ' + k + '">'
+      + medIcon(k, 24, d.color) + '</button>';
+  }).join('');
+  const colors = MED_COLORS.map(function (c) {
+    return '<button class="sw" type="button" data-pick-color="' + c + '" aria-pressed="' + (d.color === c) + '" style="--c:' + TONES[c].main + '" aria-label="颜色 ' + c + '">'
+      + '<i>' + (d.color === c ? bangIcon('check', 16, LINE_DARK) : '') + '</i></button>';
+  }).join('');
+  return { icons: icons, colors: colors };
+}
+function timesHTML() {
+  const rows = editing.times.map(function (t, i) {
+    return '<div class="timerow">'
+      + '<input class="timeinp" type="time" value="' + t + '" data-time-idx="' + i + '" aria-label="提醒时间 ' + (i + 1) + '">'
+      + '<button class="rm" type="button" data-rm-time="' + i + '" aria-label="删除这个时间">' + uiIcon('close', 14) + '</button>'
+      + '</div>';
+  }).join('');
+  return rows + '<button class="addtime" type="button" id="ed-addtime">' + uiIcon('plus', 14) + '添加时间</button>';
+}
+function daysHTML() {
+  return ALL_DAYS.map(function (d) {
+    return '<button class="day" type="button" data-day="' + d + '" aria-pressed="' + (editing.days.indexOf(d) >= 0) + '" aria-label="周' + WEEK_CN[d - 1] + '">'
+      + WEEK_CN[d - 1] + '</button>';
+  }).join('');
+}
+function renderEditorBody() {
+  const d = editing;
+  const p = pickerHTML();
+  let html = '';
+  html += '<div class="field"><div class="field-lab"><span>名称</span><span class="hint">必填</span></div>'
+    + '<input class="inp" id="ed-name" type="text" maxlength="24" placeholder="例如：维生素 D3" autocomplete="off" value="' + esc(d.name) + '"></div>';
+  html += '<div class="field"><div class="field-lab"><span>剂量</span><span class="hint">可选</span></div>'
+    + '<input class="inp" id="ed-dose" type="text" maxlength="24" placeholder="1 片 / 0.5g" autocomplete="off" value="' + esc(d.dose) + '"></div>';
+  html += '<div class="field"><div class="field-lab"><span>图标</span></div><div class="grid6" id="ed-icons">' + p.icons + '</div></div>';
+  html += '<div class="field"><div class="field-lab"><span>颜色</span></div><div class="swatches" id="ed-colors">' + p.colors + '</div></div>';
+  html += '<div class="field"><div class="field-lab"><span>提醒时间</span><span class="hint" id="ed-time-hint">' + (d.times.length > 1 ? ('共 ' + d.times.length + ' 次') : '至少 1 个') + '</span></div>'
+    + '<div id="ed-times">' + timesHTML() + '</div></div>';
+  html += '<div class="field"><div class="field-lab"><span>重复</span><span class="hint" id="ed-days-hint">' + daysLabel(d.days) + '</span></div>'
+    + '<div class="dayrow" id="ed-days">' + daysHTML() + '</div></div>';
+  html += '<div class="field"><div class="field-lab"><span>备注</span><span class="hint">可选</span></div>'
+    + '<input class="inp" id="ed-note" type="text" maxlength="40" placeholder="例如：随餐服用" autocomplete="off" value="' + esc(d.note) + '"></div>';
+  if (d.id) {
+    html += '<div class="danger-zone"><button class="btn-danger" type="button" id="ed-del">'
+      + uiIcon('trash', 16) + '删除药品</button></div>';
+  }
+  $('#ed-body').innerHTML = html;
+}
+function refreshPickers() {
+  if (!editing) return;
+  const p = pickerHTML();
+  const icons = $('#ed-icons');
+  if (icons) icons.innerHTML = p.icons;
+  const colors = $('#ed-colors');
+  if (colors) colors.innerHTML = p.colors;
+}
+function syncTimesFromInputs() {
+  if (!editing) return;
+  const arr = [];
+  $$('#ed-times .timeinp').forEach(function (inp) {
+    const v = String(inp.value || '').slice(0, 5);
+    if (/^\d{2}:\d{2}$/.test(v)) arr.push(v);
+  });
+  editing.times = arr.length ? uniqTimes(arr) : ['08:00'];
+}
+function rerenderTimes() {
+  const box = $('#ed-times');
+  if (box) box.innerHTML = timesHTML();
+  const hint = $('#ed-time-hint');
+  if (hint) hint.textContent = editing.times.length > 1 ? ('共 ' + editing.times.length + ' 次') : '至少 1 个';
+}
+function addTime() {
+  syncTimesFromInputs();
+  if (editing.times.length >= 6) { toast('一天最多 6 个提醒时间', 'peach', { icon: 'clock' }); return; }
+  const last = editing.times[editing.times.length - 1] || '08:00';
+  editing.times = uniqTimes(editing.times.concat([fmtHM(parseHM(last) + 120)]));
+  rerenderTimes();
+}
+function removeTime(idx) {
+  syncTimesFromInputs();
+  if (editing.times.length <= 1) { toast('至少要保留一个提醒时间', 'peach', { icon: 'clock' }); return; }
+  editing.times.splice(idx, 1);
+  rerenderTimes();
+}
+function toggleDay(d) {
+  const i = editing.days.indexOf(d);
+  if (i >= 0) {
+    if (editing.days.length <= 1) { toast('至少要选择一天', 'peach', { icon: 'calendar' }); return; }
+    editing.days.splice(i, 1);
+  } else {
+    editing.days.push(d);
+  }
+  editing.days.sort(function (a, b) { return a - b; });
+  const box = $('#ed-days');
+  if (box) {
+    Array.prototype.forEach.call(box.children, function (btn) {
+      const v = +btn.getAttribute('data-day');
+      btn.setAttribute('aria-pressed', editing.days.indexOf(v) >= 0 ? 'true' : 'false');
+    });
+  }
+  const hint = $('#ed-days-hint');
+  if (hint) hint.textContent = daysLabel(editing.days);
+}
+function shakeEl(el) {
+  if (!el) return;
+  el.classList.remove('shake');
+  void el.offsetWidth;
+  el.classList.add('shake');
+  setTimeout(function () { el.classList.remove('shake'); }, 320);
+}
+function saveEditor() {
+  if (!editing) return;
+  const nameEl = $('#ed-name');
+  const name = nameEl ? nameEl.value.trim() : '';
+  if (!name) {
+    shakeEl(nameEl);
+    toast('请先填写药品名称', 'peach', { icon: 'close' });
+    return;
+  }
+  syncTimesFromInputs();
+  const doseEl = $('#ed-dose');
+  const noteEl = $('#ed-note');
+  const payload = {
+    name: name,
+    dose: doseEl ? doseEl.value.trim() : '',
+    icon: editing.icon,
+    color: editing.color,
+    times: editing.times.slice(),
+    days: editing.days.slice(),
+    note: noteEl ? noteEl.value.trim() : ''
+  };
+  const isEdit = !!editing.id;
+  if (isEdit) {
+    const m = findMed(editing.id);
+    if (m) Object.assign(m, payload);
+  } else {
+    state.meds.push(Object.assign({ id: newMedId(), createdAt: Date.now() }, payload));
+  }
+  save();
+  renderAll();
+  closeEditor();
+  toast((isEdit ? '已保存 · ' : '已添加 · ') + name, 'mint', { icon: 'check' });
+}
+function deleteEditing() {
+  if (!editing || !editing.id) return;
+  const id = editing.id;
+  const name = editing.name;
+  dialog({
+    title: '删除药品',
+    body: '「' + esc(name) + '」以及它的打卡记录会被一起删除，<br>此操作无法撤销。',
+    ok: '删除', danger: true, icon: 'trash'
+  }).then(function (ok) {
+    if (!ok) return;
+    state.meds = state.meds.filter(function (m) { return m.id !== id; });
+    Object.keys(state.logs).forEach(function (dk) {
+      const day = state.logs[dk];
+      Object.keys(day).forEach(function (k) { if (day[k] && day[k].medId === id) delete day[k]; });
+      if (!Object.keys(day).length) delete state.logs[dk];
+    });
+    save();
+    renderAll();
+    closeEditor();
+    toast('已删除 · ' + name, 'peach', { icon: 'trash' });
+  });
+}
+
+/* =====================================================================
+   13. 设置：开关 / 强调色 / 导出 / 清空 / 试听
+   ===================================================================== */
+function toggleSetting(key) {
+  if (key === 'notify') {
+    if (!('Notification' in window)) { toast('当前浏览器不支持通知，仍会弹页面横幅', 'peach', { icon: 'bell' }); return; }
+    if (!state.settings.notify) {
+      Notification.requestPermission().then(function (p) {
+        const granted = (p === 'granted');
+        state.settings.notify = granted;
+        save();
+        renderSettings();
+        toast(granted ? '已允许通知' : '通知没有开启', granted ? 'mint' : 'peach', { icon: 'bell' });
+      }).catch(function () { toast('通知授权失败', 'peach', { icon: 'bell' }); });
+      return;
+    }
+    state.settings.notify = false;
+    save();
+    renderSettings();
+    return;
+  }
+  state.settings[key] = !state.settings[key];
+  save();
+  renderSettings();
+  if (key === 'sound' && state.settings.sound) chime(false);
+}
+function applyAccent() {
+  const a = (state && state.settings) ? state.settings.accent : 'mint';
+  const t = TONES[a] || TONES.mint;
+  document.documentElement.style.setProperty('--accent', t.main);
+  document.documentElement.style.setProperty('--accent-ink', LINE_DARK);
+}
+function setAccent(k) {
+  if (ACCENTS.indexOf(k) < 0) return;
+  state.settings.accent = k;
+  save();
+  applyAccent();
+  renderSettings();
+  chime(false);
+  toast('强调色已切换', 'plain', { icon: 'star', ttl: 1600 });
+}
+function exportData() {
+  try {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'pixel-dose-' + dateKey(new Date()) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2500);
+    toast('已导出 JSON 备份', 'mint', { icon: 'share' });
+  } catch (e) {
+    toast('导出失败', 'peach', { icon: 'close' });
+  }
+}
+function notifiedReset() {
+  Object.keys(notifiedMap).forEach(function (k) { delete notifiedMap[k]; });
+}
+function clearAllData(skipConfirm) {
+  const doIt = function () {
+    const settings = state.settings;
+    state = { meds: [], logs: {}, settings: settings, seeded: true };
+    notifiedReset();
+    Object.keys(snoozeUntil).forEach(function (k) { delete snoozeUntil[k]; });
+    save();
+    applyAccent();
+    renderAll();
+    switchTab('today');
+    toast('数据已清空', 'peach', { icon: 'trash' });
+  };
+  if (skipConfirm) { doIt(); return Promise.resolve(true); }
+  return dialog({
+    title: '清空所有数据',
+    body: '所有药品和打卡记录都会被删除，无法恢复。<br>建议先「导出数据」备份一份。',
+    ok: '确定清空', danger: true, icon: 'trash'
+  }).then(function (ok) { if (ok) doIt(); return ok; });
+}
+function testRemind() {
+  const doses = dosesForDate(new Date());
+  chime(false);
+  setTimeout(function () { chime(false); }, 760);
+  vibrate(30);
+  if (doses.length) {
+    setTimeout(function () { showBanner(doses[0], false); }, 320);
+  } else {
+    toast('先加一种药，再来试听提醒', 'peach', { icon: 'bell' });
+  }
+  if (state.settings.notify && ('Notification' in window) && Notification.permission === 'granted') {
+    notifySystem('试听提醒', '像素药盒 · 到点就该这样提醒你');
+  }
+}
+
+/* =====================================================================
+   14. 事件
+   ===================================================================== */
+function shiftMonth(delta) {
+  let m = histMonthM + delta, y = histMonthY;
+  if (m < 0) { m = 11; y--; } else if (m > 11) { m = 0; y++; }
+  const now = new Date();
+  if (y > now.getFullYear() || (y === now.getFullYear() && m > now.getMonth())) return;
+  histMonthY = y; histMonthM = m;
+  renderHistory();
+}
+function handleAction(el) {
+  const a = el.getAttribute('data-act');
+  if (a === 'check') { checkDose(el.getAttribute('data-dose-id'), el); return; }
+  if (a === 'snooze') { snoozeDose(el.getAttribute('data-dose-id')); return; }
+  if (a === 'banner-close') { hideBanner(); return; }
+  if (a === 'banner-take') { const id = el.getAttribute('data-dose-id'); hideBanner(); checkDose(id, el); return; }
+  if (a === 'sheet-close') { closeSheet(); return; }
+  if (a === 'test-remind') { testRemind(); return; }
+  if (a === 'export') { exportData(); return; }
+  if (a === 'clear') { clearAllData(); return; }
+}
+function onClick(ev) {
+  let t = ev.target;
+  while (t && t.nodeType !== 1) t = t.parentNode;
+  if (!t || !t.closest) return;
+
+  const tabBtn = t.closest('[data-tab]');
+  if (tabBtn) { switchTab(tabBtn.getAttribute('data-tab')); return; }
+
+  const chk = t.closest('[data-check]');
+  if (chk) { toggleCheck(chk.getAttribute('data-check'), chk); return; }
+
+  const act = t.closest('[data-act]');
+  if (act) { handleAction(act); return; }
+
+  if (t.closest('#add-med') || t.closest('#empty-add')) { openEditor(null); return; }
+  if (t.closest('#bell-btn')) { switchTab('settings'); return; }
+
+  const medCard = t.closest('[data-med-id]');
+  if (medCard) { openEditor(findMed(medCard.getAttribute('data-med-id'))); return; }
+
+  const sw = t.closest('[data-toggle]');
+  if (sw) { toggleSetting(sw.getAttribute('data-toggle')); return; }
+
+  const acc = t.closest('[data-accent]');
+  if (acc) { setAccent(acc.getAttribute('data-accent')); return; }
+
+  if (t.closest('#cal-prev')) { shiftMonth(-1); return; }
+  if (t.closest('#cal-next')) { shiftMonth(1); return; }
+
+  const cell = t.closest('[data-date]');
+  if (cell) { openDaySheet(cell.getAttribute('data-date')); return; }
+
+  const pi = t.closest('[data-pick-icon]');
+  if (pi) { if (editing) { editing.icon = pi.getAttribute('data-pick-icon'); refreshPickers(); } return; }
+  const pc = t.closest('[data-pick-color]');
+  if (pc) { if (editing) { editing.color = pc.getAttribute('data-pick-color'); refreshPickers(); } return; }
+  const rmt = t.closest('[data-rm-time]');
+  if (rmt) { removeTime(+rmt.getAttribute('data-rm-time')); return; }
+  if (t.closest('#ed-addtime')) { addTime(); return; }
+  const dayBtn = t.closest('[data-day]');
+  if (dayBtn) { if (editing) toggleDay(+dayBtn.getAttribute('data-day')); return; }
+  if (t.closest('#ed-cancel')) { closeEditor(); return; }
+  if (t.closest('#ed-save')) { saveEditor(); return; }
+  if (t.closest('#ed-del')) { deleteEditing(); return; }
+}
+function onInput(ev) {
+  if (!editing) return;
+  const el = ev.target;
+  if (!el || !el.id) return;
+  if (el.id === 'ed-name') editing.name = el.value;
+  else if (el.id === 'ed-dose') editing.dose = el.value;
+  else if (el.id === 'ed-note') editing.note = el.value;
+}
+function onChange(ev) {
+  if (!editing) return;
+  const el = ev.target;
+  if (el && el.classList && el.classList.contains('timeinp')) syncTimesFromInputs();
+}
+function onKeyDown(ev) {
+  if (ev.key !== 'Escape') return;
+  if ($('#editor').getAttribute('data-open') === 'true') { closeEditor(); return; }
+  if ($('#sheet').getAttribute('data-open') === 'true') { closeSheet(); return; }
+  if ($('#banner').getAttribute('data-open') === 'true') { hideBanner(); return; }
+}
+
+/* =====================================================================
+   15. tick / 跨天
+   ===================================================================== */
+function heroCountdownTick() {
+  const el = $('#hero-countdown');
+  if (!el || !heroTarget) return;
+  const left = heroTarget - Date.now();
+  if (left <= 1000) { renderToday(); return; }
+  el.textContent = fmtDur(left);
+}
+function tick() {
+  const now = new Date();
+  const sb = $('#sb-time');
+  if (sb) sb.textContent = pad2(now.getHours()) + ':' + pad2(now.getMinutes());
+  const dk = dateKey(now);
+  if (dk !== uiDate) {
+    uiDate = dk;
+    notifiedReset();
+    renderAll();
+    toast('新的一天 · 药单已刷新', 'plain', { icon: 'calendar', ttl: 2800 });
+  }
+  heroCountdownTick();
+  checkDue(now);
+}
+
+/* =====================================================================
+   16. 调试接口（spec §13）
+   ===================================================================== */
+function apiAddMed(med) {
+  const m = sanitizeMed(Object.assign({ id: newMedId(), createdAt: Date.now() }, med || {}));
+  if (!m) return null;
+  state.meds.push(m);
+  save();
+  renderAll();
+  return m;
+}
+function apiUpdateMed(id, patch) {
+  const m = findMed(id);
+  if (!m) return null;
+  const merged = sanitizeMed(Object.assign({}, m, patch || {}));
+  if (merged) {
+    Object.keys(merged).forEach(function (k) { m[k] = merged[k]; });
+    save();
+    renderAll();
+  }
+  return m;
+}
+function apiDeleteMed(id) {
+  const m = findMed(id);
+  if (!m) return false;
+  state.meds = state.meds.filter(function (x) { return x.id !== id; });
+  Object.keys(state.logs).forEach(function (dk) {
+    const day = state.logs[dk];
+    Object.keys(day).forEach(function (k) { if (day[k] && day[k].medId === id) delete day[k]; });
+    if (!Object.keys(day).length) delete state.logs[dk];
+  });
+  save();
+  renderAll();
+  return true;
+}
+function exposeApi() {
+  window.__pixelDose = {
+    get state() { return state; },
+    save: function () { save(); },
+    tick: function () { tick(); },
+    checkDose: function (id) { return checkDose(id); },
+    uncheckDose: function (id) { return uncheckDose(id); },
+    addMed: function (med) { return apiAddMed(med); },
+    updateMed: function (id, patch) { return apiUpdateMed(id, patch); },
+    deleteMed: function (id) { return apiDeleteMed(id); },
+    reset: function () { return clearAllData(true); },
+    seed: function () { state = buildDemo(); save(); applyAccent(); renderAll(); return state; },
+    clear: function () { return clearAllData(true); },
+    go: function (tab) { switchTab(tab); },
+    openDay: function (dk) { openDaySheet(dk); },
+    closeDay: function () { closeSheet(); },
+    notifyDose: function (id) { const d = doseByDoseId(id); if (d) { showBanner(d); return true; } return false; },
+    closeBanner: function () { hideBanner(); },
+    ring: function () { startRing(); },
+    stopRing: function () { stopRing(); },
+    toggleDose: function (id) { toggleCheck(id); },
+    streak: function () { return streakDays(); },
+    rate: function () { return onTimeRate(); }
+  };
+}
+
+/* =====================================================================
+   17. 启动
+   ===================================================================== */
+function boot() {
+  state = loadState();
+  if (!state) {
+    state = buildDemo();
+    save();
+  }
+  if (!state.settings) state.settings = defaultSettings();
+  applyAccent();
+  renderAll();
+  document.addEventListener('click', onClick);
+  document.addEventListener('input', onInput);
+  document.addEventListener('change', onChange);
+  document.addEventListener('keydown', onKeyDown);
+  const scrim = $('#scrim');
+  if (scrim) scrim.addEventListener('click', closeSheet);
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) { uiDate = dateKey(new Date()); tick(); refreshAfterDoseChange(); renderSettings(); }
+  });
+  uiDate = dateKey(new Date());
+  setInterval(tick, 1000);
+  tick();
+  exposeApi();
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();
+
+})();
+
+</script>
+</body>
+</html>
